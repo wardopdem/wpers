@@ -36,7 +36,9 @@
 
 ;;         (require 'wpers)
 
-;; Then call command `wpers-mode` for toggle mode.
+;; Then call command `wpers-mode` for toggle mode
+
+;;         M-x wpers-mode
 
 ;;; Code:
 
