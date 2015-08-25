@@ -68,7 +68,7 @@
   :init-value nil
   :lighter " wpers"
   :group 'wpers
-      :keymap wpers-mode-map
+  :keymap wpers-mode-map
   (if wpers-mode
       (progn
         (message "Wpers enabled")
