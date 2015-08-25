@@ -4,7 +4,7 @@
 
 ;; Authors:         wardopdem@gmail.com
 ;; Keywords:        persistent, cursor
-;; Package-Version: 20150820.001
+;; Package-Version: 20150825.001
 ;; Version:         1.0.0
 ;; URL:             <https://github.com/wardopdem/wpers>
 
