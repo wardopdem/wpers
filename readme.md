@@ -21,8 +21,10 @@ When you disable mode or buffer saving all the extra spaces
 will be removed.
 
 # Installation & using
-Just add wpers.el folder location to load-path and call
 
+Just add wpers.el folder location to load-path and call require (f.e. in your init)
+
+        (add-to-list 'load-path <path-to-wpers>)
         (require 'wpers)
 
 Then call command `wpers-mode` for toggle mode
