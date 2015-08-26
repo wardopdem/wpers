@@ -60,6 +60,7 @@
 
 (defconst wreps-hooks-alist
   '((pre-command-hook . wpers--pre-command-hook)
+    (auto-save-hook   . wpers-kill-final-spaces)
     (before-save-hook . wpers-kill-final-spaces))
   "alist (hook-var . hook-function)")
 
@@ -113,3 +114,4 @@ for saving cursor's position in the line (column)"
 
 (provide 'wpers)
 ;;; buffer-move.el ends here
+
