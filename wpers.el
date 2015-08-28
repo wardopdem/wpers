@@ -80,7 +80,8 @@
         (mapc '(lambda (x) (remove-hook (car x) (cdr x) t)) wreps-hooks-alist))))
 
 (defmacro wpers-save-vpos (form) "Eval form with saving current cursor's position in the line (column)"
-  `(let ((old-col (current-column)) last-col) ,form (move-to-column old-col t)))
+  (let ((old-col (make-symbol "old-col")))
+    `(let ((,old-col (current-column)) last-col) ,form (move-to-column ,old-col t))))
 
 (defun wpers-next-line () "Same as `new-line' but adds the spaces if it's needed
 for saving cursor's position in the line (column)"
@@ -114,4 +115,3 @@ for saving cursor's position in the line (column)"
 
 (provide 'wpers)
 ;;; buffer-move.el ends here
-
