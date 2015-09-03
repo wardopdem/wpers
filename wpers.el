@@ -48,6 +48,8 @@
 
 (defconst wpers-fun-prefix "wpers-" "Prefix for new functions")
 
+(defconst wpers-pspace 183 "Filler")
+
 (defconst wpers-funs-alist
   (mapcar '(lambda (x) (cons x (intern (concat wpers-fun-prefix (symbol-name x)))))
           wpers-overloaded-funs)
@@ -76,12 +78,11 @@
         (message "Wpers enabled")
         (setq-local wpers-overlay nil)
         (mapc '(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps-hooks-alist))
-      (progn
+      (progn                                            d
         (message "Wpers disabled")
         (wpers-kill-final-spaces)
         (wpers-kill-ovr)
         (mapc '(lambda (x) (remove-hook (car x) (cdr x) t)) wreps-hooks-alist))))
-
 
 (defun wpers-make-ovr (&optional prop val)
   (wpers-kill-ovr)
@@ -119,7 +120,7 @@
   (move-to-column col)
   (let* ((last-column (- (line-end-position) (line-beginning-position)))
          (spcs-needed (- col last-column)))
-    (when (plusp spcs-needed) (wpers-make-ovr 'before-string (make-string spcs-needed 32)))))
+    (when (plusp spcs-needed) (wpers-make-ovr 'before-string (make-string spcs-needed wpers-pspace)))))
 
 (defmacro wpers-save-vpos (form) "Eval form with saving current cursor's position in the line (column)"
   (let ((old-col (make-symbol "old-col")))
@@ -138,10 +139,10 @@ for saving cursor's position in the line (column)"
   (let ((ca (char-after)))
     (if (or (null ca) (eq ca 10))
         (if (null wpers-overlay)
-            (wpers-make-ovr 'before-string " ")
+            (wpers-make-ovr 'before-string (string wpers-pspace))
             (if (eq (overlay-start wpers-overlay) (point))
-                (wpers-ovr-put before-string (concat _ " "))
-                (wpers-kill-ovr) (wpers-make-ovr 'before-string " ")))
+                (wpers-ovr-put before-string (concat _ (string wpers-pspace)))
+                (wpers-kill-ovr) (wpers-make-ovr 'before-string (string wpers-pspace))))
         (right-char))))
 
         ;; (if (and wpers-overlay (eq (point) (overlay-start wpers-overlay)))
