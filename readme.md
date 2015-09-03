@@ -16,10 +16,6 @@ This minor mode for people hating cursor's jumping.
 Just turn `wpers-mode` and cursor will be moving
 with saving his position at the line (column).
 
-This would require adding extra spaces at the end of lines.
-When you disable mode or buffer saving all the extra spaces
-will be removed.
-
 # Installation & using
 
 Just add wpers.el folder location to load-path and call require (f.e. in your init)
