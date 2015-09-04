@@ -5,7 +5,7 @@ Copyright (C) 2015 <wardopdem@gmail.com>
 * Authors:         wardopdem@gmail.com
 * Keywords:        persistent, cursor
 * Package-Version: 20150825.001
-* Version:         1.0.0
+* Version:         2.0.0
 * URL:             <https://github.com/wardopdem/wpers>
 
 Licensed under the [GPL version 3](http://www.gnu.org/licenses/) or later.
