@@ -81,8 +81,8 @@
         (mapc '(lambda (x) (remove-hook (car x) (cdr x) t)) wreps-hooks-alist))))
 
 (defun wpers-pers-ovr-txt (txt)
-  (if global-hl-line-mode
-      (propertize txt 'face '(:background "DarkSeaGreen2"))
+  (if (or hl-line-mode global-hl-line-mode)
+      (propertize txt 'face (list :background (face-attribute 'highlight :background)))
       txt))
 
 (defun wpers-make-ovr (&optional prop val)
