@@ -3,10 +3,9 @@
 Copyright (C) 2015 <wardopdem@gmail.com>
 
 * Authors:         wardopdem@gmail.com
-* Keywords:        persistent, cursor
-* Package-Version: 20150825.001
 * Version:         2.0.0
 * URL:             <https://github.com/wardopdem/wpers>
+* Keywords:        persistent, cursor
 
 Licensed under the [GPL version 3](http://www.gnu.org/licenses/) or later.
 
@@ -26,6 +25,5 @@ Just add wpers.el folder location to load-path and call require (f.e. in your in
 Then call command `wpers-mode` for toggle mode
 
         M-x wpers-mode
-
 
 
