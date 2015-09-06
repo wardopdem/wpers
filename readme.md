@@ -1,4 +1,4 @@
-# wpersmode.el --- minor mode for stopping cursor jumping in emacs
+# wpers.el --- minor mode for stopping cursor jumping in emacs
 
 Copyright (C) 2015 <wardopdem@gmail.com>
 
@@ -28,9 +28,7 @@ Then call command `wpers-mode` for toggle mode
 
 Call command `wpers-overlay-visible` for toggle visibility of overlay
 
-        M-x wpers-mode
-
-
+        M-x wpers-overlay-visible
 
 # Mode constants
 
