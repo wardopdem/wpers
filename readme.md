@@ -26,4 +26,11 @@ Then call command `wpers-mode` for toggle mode
 
         M-x wpers-mode
 
+Call command `wpers-overlay-visible` for toggle visibility of overlay
+
+        M-x wpers-mode
+
+
+
+# Mode constants
 

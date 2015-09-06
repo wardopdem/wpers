@@ -37,121 +37,141 @@
 
 ;;         M-x wpers-mode
 
+;; Call command `wpers-overlay-visible` for toggle visibility of overlay
+
+;;         M-x wpers-overlay-visible
+
 ;;; Code:
 
-(defconst wpers-overloaded-funs
+;;; Mode constants
+
+(defconst wpers--prefix "wpers-" "Package prefix")
+
+(defun wpers--intern (x &optional public) "Make symbol with package prefix (wpers)"
+  (intern (concat wpers--prefix (when (not public) "-") (symbol-name x))))
+
+(defconst wpers--pspace-def 183 "Default char for overlay displaying")
+
+(defconst wpers--pspace 32 "Pseudo-space - char for displaying in the overlay instead of real spaces") 
+
+(defconst wpers--overloaded-funs
   [next-line previous-line
    left-char right-char backward-delete-char-untabify
    move-end-of-line move-beginning-of-line
    scroll-up scroll-down] 
   "Functions overloaded by the mode")
 
-(defconst wpers-fun-prefix "wpers-" "Prefix for new functions")
-
-(defconst wpers-pspace 183 "Pseudo-space - char for showing in the overlay instead of real spaces") ; try 183 for explicitness
-
-(defun wpers--intern (x &optional priv) (intern (concat wpers-fun-prefix (when priv "-")(symbol-name x))))
-
-(defconst wpers-funs-alist
-  (mapcar '(lambda (x) (cons x (wpers--intern x))) wpers-overloaded-funs)
+(defconst wpers--funs-alist
+  (mapcar '(lambda (x) (cons x (wpers--intern x))) wpers--overloaded-funs)
   "alist (old . new) functions")
 
-(defconst wpers-mode-map
+(defconst wpers--mode-map
   (reduce '(lambda (s x) (define-key s (vector 'remap (car x)) (cdr x)) s)
-          wpers-funs-alist :initial-value (make-sparse-keymap))
+          wpers--funs-alist :initial-value (make-sparse-keymap))
   "Mode map for `wpers'")
 
-(defconst wreps-hooks-alist
+(defconst wreps--hooks-alist
   '((pre-command-hook  . wpers--pre-command-hook)
-    (post-command-hook . wpers--post-command-hook)
-    (auto-save-hook    . wpers-kill-ovr)
-    (before-save-hook  . wpers-kill-ovr))
+    (post-command-hook . wpers--post-command-hook))
   "alist (hook-var . hook-function)")
+
+;;; Mode public interface
 
 (define-minor-mode wpers-mode
   "Toggle persistent cursor mode."
   :init-value nil
   :lighter " wpers"
   :group 'wpers
-  :keymap wpers-mode-map
+  :keymap wpers--mode-map
   (if wpers-mode
       (progn
         (message "Wpers enabled")
-        (setq-local wpers-overlay nil)
-        (mapc '(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps-hooks-alist))
+        (setq-local wpers--overlay nil)
+        (mapc '(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
       (progn
         (message "Wpers disabled")         
-        (wpers-kill-ovr)
-        (mapc '(lambda (x) (remove-hook (car x) (cdr x) t)) wreps-hooks-alist))))
+        (wpers--ovr-kill)
+        (mapc '(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
 
-(defun wpers--propz-ovr-txt (txt)
+(defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
+  (interactive "P")
+  (setq wpers--pspace 
+        (cond ((null val) (if (= wpers--pspace 32) wpers--pspace-def 32))
+              ((eq val t) wpers--pspace-def)
+              (t val)))
+  (when wpers--overlay (wpers--ovr-put (make-string (length (wpers--ovr-get)) wpers--pspace))))
+
+;;; Overlay managing functions
+
+(defun wpers--ovr-propz-txt (txt) "Propertize TXT for overlay displaying"
   (if (or hl-line-mode global-hl-line-mode)
       (propertize txt 'face (list :background (face-attribute 'highlight :background)))
       txt))
 
-(defun wpers-make-ovr (&optional prop val)
-  (wpers-kill-ovr)
-  (setq wpers-overlay (make-overlay (point) (point)))
-  (overlay-put wpers-overlay 'wpers t)
-  (if (and prop val) (overlay-put wpers-overlay prop val)))
+(defun wpers--ovr-make (&optional str) "Creating overlay with optional setting before-string to STR"
+  (wpers--ovr-kill)
+  (setq wpers--overlay (make-overlay (point) (point)))
+  (overlay-put wpers--overlay 'wpers t)
+  (if str (overlay-put wpers--overlay 'before-string (wpers--ovr-propz-txt str))))
 
-(defun wpers-ovr-at-point-p () "Return t if wpers-overlay was placed at the point"
-  (eq (point) (overlay-start wpers-overlay)))
+(defun wpers--ovr-at-point-p () "Return t if wpers--overlay was placed at the point"
+  (eq (point) (overlay-start wpers--overlay)))
 
-(defun wpers-txt-after-ovr-p ()
-  (when wpers-overlay
-    (let ((ch (char-after (overlay-start wpers-overlay))))
+(defun wpers--ovr-txt-after-p () "Return t if exists something after overlay"
+  (when wpers--overlay
+    (let ((ch (char-after (overlay-start wpers--overlay))))
       (and ch (not (eq ch 10))))))
 
-(defun wpers--ovr-to-spcs ()
-  (let ((ovr-size (when (wpers-ovr-at-point-p) (length (wpers-ovr-get)))))
+(defun wpers--ovr-to-spcs () "Replacing overlay (wpers--overlay) with space chars (32)"
+  (let ((ovr-size (when (wpers--ovr-at-point-p) (length (wpers--ovr-get)))))
     (save-excursion
      (goto-char ov-pos)
-     (insert (make-string (length (wpers-ovr-get)) 32)))
+     (insert (make-string (length (wpers--ovr-get)) 32)))
     (when ovr-size (right-char ovr-size))))
   
-(defun wpers-kill-ovr ()
-  (when wpers-overlay
-    (let* ((ov-pos (overlay-start wpers-overlay))
+(defun wpers--ovr-kill () "Killing of the wpers--overlay with the replacement of spacess, if necessary"
+  (when wpers--overlay
+    (let* ((ov-pos (overlay-start wpers--overlay))
            (ch (char-after ov-pos)))
       (when (and ch (not (eq ch 10))) (wpers--ovr-to-spcs)))
-    (delete-overlay wpers-overlay)
-    (setq wpers-overlay nil)))
+    (delete-overlay wpers--overlay)
+    (setq wpers--overlay nil)))
 
-(defmacro wpers-ovr-get (&optional prop)
-  "Get wpers-overlay property"
-  (let* ((prop (or prop 'before-string)))
-    `(overlay-get wpers-overlay ',prop)))
+(defun wpers--ovr-get () "Get wpers--overlay before-string property"
+   (overlay-get wpers--overlay 'before-string))
 
-(defmacro wpers-ovr-put (prop val)
-  "Set wpers-overlay property PROP to VAL within context where variable _ is set to (wpers-ovr-get PROP)"
-  `(let ((_ (wpers-ovr-get ,prop)))
-    (overlay-put wpers-overlay ',prop ,val)))
+(defmacro wpers--ovr-put (val) 
+  "Set wpers--overlay property before-string to VAL within context where variable _ is set to (wpers--ovr-get 'before-string)"
+  `(let ((_ (wpers--ovr-get)))
+    (overlay-put wpers--overlay 'before-string (wpers--ovr-propz-txt ,val))))
 
-(defun wpers-current-column ()
-  "Same as `current-column' but it takes account size of overlay if it present"
+;;; Column managing functions
+
+(defun wpers--current-column () "Same as `current-column' but it takes account size of overlay if it present"
   (let ((res (current-column)))
-    (if (and wpers-overlay (wpers-ovr-at-point-p))
-        (+ res (length (wpers-ovr-get)))
+    (if (and wpers--overlay (wpers--ovr-at-point-p))
+        (+ res (length (wpers--ovr-get)))
         res)))
 
-(defun wpers-move-to-column (col)
-  "Same as `move-to-column' but adds overlay for correction cursor position in the line (column)"
+(defun wpers--move-to-column (col) "Same as `move-to-column' but adds overlay for correction cursor position in the line (column)"
   (move-to-column col)
   (let* ((last-column (- (line-end-position) (line-beginning-position)))
          (spcs-needed (- col last-column)))
     (when (plusp spcs-needed)
-      (wpers-make-ovr 'before-string (wpers--propz-ovr-txt (make-string spcs-needed wpers-pspace))))))
+      (wpers--ovr-make (make-string spcs-needed wpers--pspace)))))
 
-(defmacro wpers-save-vpos (form) "Eval form with saving current cursor's position in the line (column)"
+(defmacro wpers--save-vpos (form) "Eval form with saving current cursor's position in the line (column)"
   (let ((old-col (make-symbol "old-col")))
-    `(let ((,old-col (wpers-current-column))) ,form (wpers-move-to-column ,old-col))))
+    `(let ((,old-col (wpers--current-column))) ,form (wpers--move-to-column ,old-col))))
+
+;;; Mode remap handlers
 
 (defmacro wpers--def-remap-fun (org-fun doc-str &rest body)
+  "Macro for defining remap-functions (add package prefix to the name)"
   `(defun ,(wpers--intern org-fun) () ,doc-str ,@body))
 
 (defmacro wpers--def-vert (name doc-str expr) "Auxiliary macro for defining commands that do vertical cursor movement"
-  `(wpers--def-remap-fun ,name ,doc-str (interactive) (message "!") (wpers-save-vpos ,expr)))
+  `(wpers--def-remap-fun ,name ,doc-str (interactive) (wpers--save-vpos ,expr)))
 
 (wpers--def-vert next-line "Same as `new-line' but adds the overlay if it's needed
 for saving cursor's position in the line (column)"
@@ -161,66 +181,66 @@ for saving cursor's position in the line (column)"
 for saving cursor's position in the line (column)"
   (previous-line))
 
-(wpers--def-vert scroll-up "" (cua-scroll-up))
+(wpers--def-vert scroll-up "Scrolling up with saving cursor's position in the line (column)" (scroll-up))
 
-(wpers--def-vert scroll-down "" (cua-scroll-down))
+(wpers--def-vert scroll-down "Scrolling down with saving cursor's position in the line (column)" (scroll-down))
 
 (wpers--def-remap-fun right-char "Same as `right-char' but adds the overlay if cursor at end of line (column)"
   (interactive)
   (let ((ca (char-after)))
     (if (or (null ca) (eq ca 10))
-        (if (null wpers-overlay)
-            (wpers-make-ovr 'before-string (wpers--propz-ovr-txt (string wpers-pspace)))
-            (if (wpers-ovr-at-point-p)
-                (wpers-ovr-put before-string (wpers--propz-ovr-txt (concat _ (string wpers-pspace))))
-                (wpers-kill-ovr) (wpers-make-ovr 'before-string (wpers--propz-ovr-txt (string wpers-pspace)))))
-        (wpers-kill-ovr) (right-char))))
+        (if (null wpers--overlay)
+            (wpers--ovr-make (string wpers--pspace))
+            (if (wpers--ovr-at-point-p)
+                (wpers--ovr-put (concat _ (string wpers--pspace)))
+                (wpers--ovr-kill) (wpers--ovr-make (string wpers--pspace))))
+        (wpers--ovr-kill) (right-char))))
 
 (defmacro wpers--def-left (name doc-str expr)
-  "Auxiliary macro for defining commands that do left cursor movement"
-  `(wpers--def-remap-fun ,name 
+  "Macro for defining commands that do cursor movement to the left"
+  `(wpers--def-remap-fun ,name
      ,doc-str
      (interactive)
-     (if wpers-overlay
-         (if (and (wpers-ovr-at-point-p) (eq (char-after) 10))
-             (if (plusp (length (wpers-ovr-get)))
-                 (wpers-ovr-put before-string (wpers--propz-ovr-txt (substring _ 1)))
-                 (wpers-kill-ovr) ,expr)
-             (wpers-kill-ovr) ,expr)
+     (if wpers--overlay
+         (if (and (wpers--ovr-at-point-p) (or (null (char-after)) (eq (char-after) 10)))
+             (if (plusp (length (wpers--ovr-get)))
+                 (wpers--ovr-put (substring _ 1))
+                 (wpers--ovr-kill) ,expr)
+             (wpers--ovr-kill) ,expr)
          ,expr)))
 
 (wpers--def-left left-char
-                 "Same as `left-char' but performs correcting or deleting the overlay if it's needed" 
+                 "Same as `left-char' but performs correcting or deleting the overlay if it's needed"
                  (left-char))
 
 (wpers--def-left backward-delete-char-untabify
                  "Same as `backward-delete-char-untabify' but performs correcting or deleting the overlay if it's needed"
                  (backward-delete-char-untabify 1))
 
-(defun wpers-move-end-of-line ()
-  "Function `move-end-of-line' is called
-and then removes overlay and all trailing spaces"
+(defun wpers--move-end-of-line ()
+  "Function `move-end-of-line' is called and then removes overlay and all trailing spaces"
   (interactive)                                    
   (move-end-of-line nil)
-  (when wpers-overlay (wpers-kill-ovr)))
+  (when wpers--overlay (wpers--ovr-kill)))
 
-(defun wpers-move-beginning-of-line ()
-  "Function `move-beginning-of-line' is called
-and then removes overlay if it's present and line is empty"
+(defun wpers--move-beginning-of-line ()
+  "Function `move-beginning-of-line' is called and then removes overlay if it's present and line is empty"
   (interactive)
   (move-beginning-of-line nil)
-  (when (and wpers-overlay (zerop (current-column))) (wpers-kill-ovr)))
+  (when (and wpers--overlay (zerop (current-column))) (wpers--ovr-kill)))
+
+;;; Hooks
 
 (defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil or marking is active"
   (if (or this-command-keys-shift-translated mark-active visual-line-mode)
-      (let ((fn-pair (rassoc this-command wpers-funs-alist)))
+      (let ((fn-pair (rassoc this-command wpers--funs-alist)))
         (when fn-pair (setq this-command (car fn-pair))))))
 
-(defun wpers--post-command-hook () "Killing wpers-overlay when it is not at the point"
-  (when (and wpers-overlay
-             (or (not (wpers-ovr-at-point-p))
-                 (wpers-txt-after-ovr-p)))
-    (wpers-kill-ovr)))
+(defun wpers--post-command-hook () "Killing wpers--overlay when it is not at the point"
+  (when (and wpers--overlay
+             (or (not (wpers--ovr-at-point-p))
+                 (wpers--ovr-txt-after-p)))
+    (wpers--ovr-kill)))
 
 (provide 'wpers)
 ;;; buffer-move.el ends here
