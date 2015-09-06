@@ -38,16 +38,22 @@
 ;;         M-x wpers-mode
 
 ;;; Code:
-(defconst wpers-overloaded-funs [next-line previous-line left-char right-char backward-delete-char-untabify move-end-of-line move-beginning-of-line]
+
+(defconst wpers-overloaded-funs
+  [next-line previous-line
+   left-char right-char backward-delete-char-untabify
+   move-end-of-line move-beginning-of-line
+   scroll-up scroll-down] 
   "Functions overloaded by the mode")
 
 (defconst wpers-fun-prefix "wpers-" "Prefix for new functions")
 
-(defconst wpers-pspace 32 "Pseudo-space - char for showing in the overlay instead of real spaces") ; try 183 for explicitness
+(defconst wpers-pspace 183 "Pseudo-space - char for showing in the overlay instead of real spaces") ; try 183 for explicitness
+
+(defun wpers--intern (x &optional priv) (intern (concat wpers-fun-prefix (when priv "-")(symbol-name x))))
 
 (defconst wpers-funs-alist
-  (mapcar '(lambda (x) (cons x (intern (concat wpers-fun-prefix (symbol-name x)))))
-          wpers-overloaded-funs)
+  (mapcar '(lambda (x) (cons x (wpers--intern x))) wpers-overloaded-funs)
   "alist (old . new) functions")
 
 (defconst wpers-mode-map
@@ -118,7 +124,7 @@
     `(overlay-get wpers-overlay ',prop)))
 
 (defmacro wpers-ovr-put (prop val)
-  "Set wpers-overlay property to VAL within context where variable _ is set to (wpers-ovr-get PROP)"
+  "Set wpers-overlay property PROP to VAL within context where variable _ is set to (wpers-ovr-get PROP)"
   `(let ((_ (wpers-ovr-get ,prop)))
     (overlay-put wpers-overlay ',prop ,val)))
 
@@ -141,15 +147,25 @@
   (let ((old-col (make-symbol "old-col")))
     `(let ((,old-col (wpers-current-column))) ,form (wpers-move-to-column ,old-col))))
 
-(defun wpers-next-line () "Same as `new-line' but adds the overlay if it's needed
-for saving cursor's position in the line (column)"
-  (interactive) (wpers-save-vpos (next-line)))
+(defmacro wpers--def-remap-fun (org-fun doc-str &rest body)
+  `(defun ,(wpers--intern org-fun) () ,doc-str ,@body))
 
-(defun wpers-previous-line () "Same as `previous-line' but adds the overlay if it's needed
-for saving cursor's position in the line (column)"
-  (interactive) (wpers-save-vpos (previous-line)))
+(defmacro wpers--def-vert (name doc-str expr) "Auxiliary macro for defining commands that do vertical cursor movement"
+  `(wpers--def-remap-fun ,name ,doc-str (interactive) (message "!") (wpers-save-vpos ,expr)))
 
-(defun wpers-right-char () "Same as `right-char' but adds the overlay if cursor at end of line (column)"
+(wpers--def-vert next-line "Same as `new-line' but adds the overlay if it's needed
+for saving cursor's position in the line (column)"
+  (next-line))
+
+(wpers--def-vert previous-line "Same as `previous-line' but adds the overlay if it's needed
+for saving cursor's position in the line (column)"
+  (previous-line))
+
+(wpers--def-vert scroll-up "" (cua-scroll-up))
+
+(wpers--def-vert scroll-down "" (cua-scroll-down))
+
+(wpers--def-remap-fun right-char "Same as `right-char' but adds the overlay if cursor at end of line (column)"
   (interactive)
   (let ((ca (char-after)))
     (if (or (null ca) (eq ca 10))
@@ -161,8 +177,8 @@ for saving cursor's position in the line (column)"
         (wpers-kill-ovr) (right-char))))
 
 (defmacro wpers--def-left (name doc-str expr)
-  "Auxiliary macro for defining commands that do left shifting"
-  `(defun ,name ()
+  "Auxiliary macro for defining commands that do left cursor movement"
+  `(wpers--def-remap-fun ,name 
      ,doc-str
      (interactive)
      (if wpers-overlay
@@ -173,11 +189,11 @@ for saving cursor's position in the line (column)"
              (wpers-kill-ovr) ,expr)
          ,expr)))
 
-(wpers--def-left wpers-left-char
+(wpers--def-left left-char
                  "Same as `left-char' but performs correcting or deleting the overlay if it's needed" 
                  (left-char))
 
-(wpers--def-left wpers-backward-delete-char-untabify
+(wpers--def-left backward-delete-char-untabify
                  "Same as `backward-delete-char-untabify' but performs correcting or deleting the overlay if it's needed"
                  (backward-delete-char-untabify 1))
 
