@@ -196,10 +196,10 @@ for saving cursor's position in the line (column)"
                 (wpers--ovr-kill) (wpers--ovr-make (string wpers--pspace))))
         (wpers--ovr-kill) (right-char))))
 
-(defmacro wpers--def-left (name &optional doc-str expr)
+(defmacro wpers--def-left (name &optional doc-str &rest params)
   "Macro for defining commands that do cursor movement to the left"
   (let ((doc-str (or doc-str (format "Same as `%s' but performs correcting or deleting the overlay if it's needed" name)))
-        (expr (or expr (list name))))
+        (expr (list* name params)))
     `(wpers--def-remap-fun ,name ,doc-str
       (interactive)
       (if wpers--overlay
@@ -212,7 +212,7 @@ for saving cursor's position in the line (column)"
 
 (wpers--def-left left-char)
 
-(wpers--def-left backward-delete-char-untabify)
+(wpers--def-left backward-delete-char-untabify nil 1)
 
 (defun wpers--move-end-of-line ()
   "Function `move-end-of-line' is called and then removes overlay and all trailing spaces"
