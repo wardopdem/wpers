@@ -196,26 +196,23 @@ for saving cursor's position in the line (column)"
                 (wpers--ovr-kill) (wpers--ovr-make (string wpers--pspace))))
         (wpers--ovr-kill) (right-char))))
 
-(defmacro wpers--def-left (name doc-str expr)
+(defmacro wpers--def-left (name &optional doc-str expr)
   "Macro for defining commands that do cursor movement to the left"
-  `(wpers--def-remap-fun ,name
-     ,doc-str
-     (interactive)
-     (if wpers--overlay
-         (if (and (wpers--ovr-at-point-p) (or (null (char-after)) (eq (char-after) 10)))
-             (if (plusp (length (wpers--ovr-get)))
-                 (wpers--ovr-put (substring _ 1))
-                 (wpers--ovr-kill) ,expr)
-             (wpers--ovr-kill) ,expr)
-         ,expr)))
+  (let ((doc-str (or doc-str (format "Same as `%s' but performs correcting or deleting the overlay if it's needed" name)))
+        (expr (or expr (list name))))
+    `(wpers--def-remap-fun ,name ,doc-str
+      (interactive)
+      (if wpers--overlay
+          (if (and (wpers--ovr-at-point-p) (or (null (char-after)) (eq (char-after) 10)))
+              (if (plusp (length (wpers--ovr-get)))
+                  (wpers--ovr-put (substring _ 1))
+                  (wpers--ovr-kill) ,expr)
+              (wpers--ovr-kill) ,expr)
+          ,expr))))
 
-(wpers--def-left left-char
-                 "Same as `left-char' but performs correcting or deleting the overlay if it's needed"
-                 (left-char))
+(wpers--def-left left-char)
 
-(wpers--def-left backward-delete-char-untabify
-                 "Same as `backward-delete-char-untabify' but performs correcting or deleting the overlay if it's needed"
-                 (backward-delete-char-untabify 1))
+(wpers--def-left backward-delete-char-untabify)
 
 (defun wpers--move-end-of-line ()
   "Function `move-end-of-line' is called and then removes overlay and all trailing spaces"
