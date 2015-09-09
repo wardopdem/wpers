@@ -104,6 +104,14 @@
               (t val)))
   (when wpers--overlay (wpers--ovr-put (make-string (length (wpers--ovr-get)) wpers--pspace))))
 
+;;; Utils
+
+(defmacro wpers--at-end (&optional expr)
+  (let ((expr (or expr '(overlay-start wpers--overlay)))
+        (ch (make-symbol "ch")))
+    `(let ((,ch (char-after ,expr)))
+       (or (null ,ch) (eq ,ch 10)))))
+
 ;;; Overlay managing functions
 
 (defun wpers--ovr-propz-txt (txt) "Propertize TXT for overlay displaying"
@@ -121,24 +129,20 @@
   (eq (point) (overlay-start wpers--overlay)))
 
 (defun wpers--ovr-txt-after-p () "Return t if exists something after overlay"
-  (when wpers--overlay
-    (let ((ch (char-after (overlay-start wpers--overlay))))
-      (and ch (not (eq ch 10))))))
+  (and wpers--overlay (not (wpers--at-end)))) 
 
 (defun wpers--ovr-to-spcs () "Replacing overlay (wpers--overlay) with space chars (32)"
   (let ((ovr-size (when (wpers--ovr-at-point-p) (length (wpers--ovr-get)))))
     (save-excursion
-     (goto-char ov-pos)
+     (goto-char (overlay-start wpers--overlay))       
      (insert (make-string (length (wpers--ovr-get)) 32)))
-    (when ovr-size (right-char ovr-size))))
+    (when ovr-size (right-char ovr-size))))      
   
 (defun wpers--ovr-kill () "Killing of the wpers--overlay with the replacement of spacess, if necessary"
   (when wpers--overlay
-    (let* ((ov-pos (overlay-start wpers--overlay))
-           (ch (char-after ov-pos)))
-      (when (and ch (not (eq ch 10))) (wpers--ovr-to-spcs)))
+    (when (not (wpers--at-end)) (wpers--ovr-to-spcs))
     (delete-overlay wpers--overlay)
-    (setq wpers--overlay nil)))
+    (setq wpers--overlay nil)))           
 
 (defun wpers--ovr-get () "Get wpers--overlay before-string property"
    (overlay-get wpers--overlay 'before-string))
@@ -190,14 +194,13 @@ for saving cursor's position in the line (column)"
 
 (wpers--def-remap-fun right-char "Same as `right-char' but adds the overlay if cursor at end of line (column)"
   (interactive)
-  (let ((ca (char-after)))
-    (if (or (null ca) (eq ca 10))
-        (if (null wpers--overlay)
-            (wpers--ovr-make (string wpers--pspace))
-            (if (wpers--ovr-at-point-p)
-                (wpers--ovr-put (concat _ (string wpers--pspace)))
-                (wpers--ovr-kill) (wpers--ovr-make (string wpers--pspace))))
-        (wpers--ovr-kill) (right-char))))
+  (if (wpers--at-end (point))
+      (if (null wpers--overlay)
+          (wpers--ovr-make (string wpers--pspace))
+          (if (wpers--ovr-at-point-p)
+              (wpers--ovr-put (concat _ (string wpers--pspace)))
+              (wpers--ovr-kill) (wpers--ovr-make (string wpers--pspace))))
+      (wpers--ovr-kill) (right-char)))
 
 (defmacro wpers--def-left (name &optional doc-str &rest params)
   "Macro for defining commands that do cursor movement to the left"
@@ -206,7 +209,7 @@ for saving cursor's position in the line (column)"
     `(wpers--def-remap-fun ,name ,doc-str
       (interactive)
       (if wpers--overlay
-          (if (and (wpers--ovr-at-point-p) (or (null (char-after)) (eq (char-after) 10)))
+          (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
               (if (plusp (length (wpers--ovr-get)))
                   (wpers--ovr-put (substring _ 1))
                   (wpers--ovr-kill) ,expr)
