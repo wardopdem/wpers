@@ -45,6 +45,9 @@
 
 ;;; Mode constants
 
+(require 'cl)
+(require 'hl-line)
+
 (defconst wpers--prefix "wpers-" "Package prefix")
 
 (defun wpers--intern (x &optional public) "Make symbol with package prefix (wpers)"
@@ -62,11 +65,11 @@
   "Functions overloaded by the mode")
 
 (defconst wpers--funs-alist
-  (mapcar '(lambda (x) (cons x (wpers--intern x))) wpers--overloaded-funs)
+  (mapcar #'(lambda (x) (cons x (wpers--intern x))) wpers--overloaded-funs)
   "alist (old . new) functions")
 
 (defconst wpers--mode-map
-  (reduce '(lambda (s x) (define-key s (vector 'remap (car x)) (cdr x)) s)
+  (reduce #'(lambda (s x) (define-key s (vector 'remap (car x)) (cdr x)) s)
           wpers--funs-alist :initial-value (make-sparse-keymap))
   "Mode map for `wpers'")
 
@@ -87,11 +90,11 @@
       (progn
         (message "Wpers enabled")
         (setq-local wpers--overlay nil)
-        (mapc '(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
+        (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
       (progn
         (message "Wpers disabled")         
         (wpers--ovr-kill)
-        (mapc '(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
+        (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
 
 (defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
   (interactive "P")
