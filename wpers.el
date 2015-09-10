@@ -172,25 +172,23 @@
     `(let ((,old-col (wpers--current-column))) ,form (wpers--move-to-column ,old-col))))
 
 ;;; Mode remap handlers
-
+                           
 (defmacro wpers--def-remap-fun (org-fun doc-str &rest body)
   "Macro for defining remap-functions (add package prefix to the name)"
   `(defun ,(wpers--intern org-fun) () ,doc-str ,@body))
 
-(defmacro wpers--def-vert (name doc-str expr) "Auxiliary macro for defining commands that do vertical cursor movement"
-  `(wpers--def-remap-fun ,name ,doc-str (interactive) (wpers--save-vpos ,expr)))
+(defmacro wpers--def-vert (name doc-str command) "Auxiliary macro for defining commands that do vertical cursor movement"
+  `(wpers--def-remap-fun ,name ,doc-str (interactive) (wpers--save-vpos (call-interactively ',command ))))
 
 (wpers--def-vert next-line "Same as `new-line' but adds the overlay if it's needed
-for saving cursor's position in the line (column)"
-  (next-line))
+for saving cursor's position in the line (column)" next-line)
 
 (wpers--def-vert previous-line "Same as `previous-line' but adds the overlay if it's needed
-for saving cursor's position in the line (column)"
-  (previous-line))
+for saving cursor's position in the line (column)" previous-line)
 
-(wpers--def-vert scroll-up "Scrolling up with saving cursor's position in the line (column)" (scroll-up))
+(wpers--def-vert scroll-up "Scrolling up with saving cursor's position in the line (column)" scroll-up)
 
-(wpers--def-vert scroll-down "Scrolling down with saving cursor's position in the line (column)" (scroll-down))
+(wpers--def-vert scroll-down "Scrolling down with saving cursor's position in the line (column)" scroll-down)
 
 (wpers--def-remap-fun right-char "Same as `right-char' but adds the overlay if cursor at end of line (column)"
   (interactive)
@@ -202,11 +200,11 @@ for saving cursor's position in the line (column)"
               (wpers--ovr-kill) (wpers--ovr-make (string wpers--pspace))))
       (wpers--ovr-kill) (right-char)))
 
-(defmacro wpers--def-left (name &optional doc-str &rest params)
+(defmacro wpers--def-left (command &optional doc-str)
   "Macro for defining commands that do cursor movement to the left"
-  (let ((doc-str (or doc-str (format "Same as `%s' but performs correcting or deleting the overlay if it's needed" name)))
-        (expr (list* name params)))
-    `(wpers--def-remap-fun ,name ,doc-str
+  (let ((doc-str (or doc-str (format "Same as `%s' but performs correcting or deleting the overlay if it's needed" command)))
+        (expr `(call-interactively ',command)))
+    `(wpers--def-remap-fun ,command ,doc-str
       (interactive)
       (if wpers--overlay
           (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
@@ -218,7 +216,7 @@ for saving cursor's position in the line (column)"
 
 (wpers--def-left left-char)
 
-(wpers--def-left backward-delete-char-untabify nil 1)
+(wpers--def-left backward-delete-char-untabify)
 
 (defun wpers--move-end-of-line ()
   "Function `move-end-of-line' is called and then removes overlay and all trailing spaces"
@@ -235,7 +233,7 @@ for saving cursor's position in the line (column)"
 ;;; Hooks
 
 (defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil or marking is active"
-  (if (or this-command-keys-shift-translated mark-active visual-line-mode)
+  (if (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
       (let ((fn-pair (rassoc this-command wpers--funs-alist)))
         (when fn-pair (setq this-command (car fn-pair))))))
 
