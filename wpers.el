@@ -270,7 +270,7 @@ for saving cursor's position in the line (column)")
 (defun wpers--post-command-hook () "Killing wpers--overlay when it is not at the point"
   (when (and wpers--overlay
              (or (not (wpers--ovr-at-point-p))
-                 (wpers--ovr-txt-after-p))
+                 (wpers--ovr-txt-after-p)))
     (wpers--ovr-kill)))
 
 (provide 'wpers)
