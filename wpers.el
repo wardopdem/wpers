@@ -83,12 +83,16 @@
 
 (defconst wpers--overloaded-funs
   [next-line previous-line
-   left-char right-char backward-delete-char-untabify
+   left-char right-char forward-char backward-char 
+   backward-delete-char backward-delete-char-untabify
    move-end-of-line move-beginning-of-line
    scroll-up scroll-down mouse-set-point] 
   "Functions overloaded by the mode")
 
-(defconst wpers-ovr-killing-funs '(undo redo))
+(defcustom wpers-ovr-killing-funs '(undo)
+  "Functions killing overlay"
+  :group 'wpers
+  :type '(repeat function))
 
 (defconst wpers--funs-alist
   (mapcar #'(lambda (x) (cons x (wpers--intern x))) wpers--overloaded-funs)
@@ -219,31 +223,38 @@ for saving cursor's position in the line (column)")
 
 (wpers--def-vert scroll-down "Scrolling down with saving cursor's position in the line (column)")
 
-(wpers--def-remap-fun right-char "Same as `right-char' but adds the overlay if cursor at end of line (column)"
-  (interactive)
-  (if (wpers--at-end (point))
-      (if (null wpers--overlay)
-          (wpers--ovr-make (string wpers-pspace))
-          (if (wpers--ovr-at-point-p)
-              (wpers--ovr-put (concat _ (string wpers-pspace)))
-              (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
-      (wpers--ovr-kill) (call-interactively 'right-char)))
+(defmacro wpers--def-right (command &optional doc-str)
+  "Macro for defining commands that do cursor movement to the right"
+  (let ((expr `(call-interactively ',command)))
+    `(wpers--def-remap-fun ,command ,doc-str
+       (interactive)
+       (if (wpers--at-end (point))
+           (if (null wpers--overlay)
+               (wpers--ovr-make (string wpers-pspace))
+               (if (wpers--ovr-at-point-p)
+                   (wpers--ovr-put (concat _ (string wpers-pspace)))
+                   (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
+           (wpers--ovr-kill) ,expr))))
+
+(wpers--def-right right-char)
+(wpers--def-right forward-char)
 
 (defmacro wpers--def-left (command &optional doc-str)
   "Macro for defining commands that do cursor movement to the left"
   (let ((expr `(call-interactively ',command)))
     `(wpers--def-remap-fun ,command ,doc-str
-      (interactive)
-      (if wpers--overlay
-          (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
-              (if (plusp (length (wpers--ovr-get)))
-                  (wpers--ovr-put (substring _ 1))
-                  (wpers--ovr-kill) ,expr)
-              (wpers--ovr-kill) ,expr)
-          ,expr))))
+       (interactive)
+       (if wpers--overlay
+           (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
+               (if (plusp (length (wpers--ovr-get)))
+                   (wpers--ovr-put (substring _ 1))
+                   (wpers--ovr-kill) ,expr)
+               (wpers--ovr-kill) ,expr)
+           ,expr))))
 
 (wpers--def-left left-char)
-
+(wpers--def-left backward-char)
+(wpers--def-left backward-delete-char)
 (wpers--def-left backward-delete-char-untabify)
 
 (defun wpers--move-end-of-line ()
