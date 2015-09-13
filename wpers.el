@@ -88,6 +88,8 @@
    scroll-up scroll-down mouse-set-point] 
   "Functions overloaded by the mode")
 
+(defconst wpers-ovr-killing-funs '(undo redo))
+
 (defconst wpers--funs-alist
   (mapcar #'(lambda (x) (cons x (wpers--intern x))) wpers--overloaded-funs)
   "alist (old . new) functions")
@@ -259,14 +261,16 @@ for saving cursor's position in the line (column)")
 ;;; Hooks
 
 (defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil or marking is active"
-  (if (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
-      (let ((fn-pair (rassoc this-command wpers--funs-alist)))
-        (when fn-pair (setq this-command (car fn-pair))))))
+  (if (member this-command wpers-ovr-killing-funs)
+      (wpers--ovr-kill)
+      (if (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
+          (let ((fn-pair (rassoc this-command wpers--funs-alist)))
+            (when fn-pair (setq this-command (car fn-pair)))))))
 
 (defun wpers--post-command-hook () "Killing wpers--overlay when it is not at the point"
   (when (and wpers--overlay
              (or (not (wpers--ovr-at-point-p))
-                 (wpers--ovr-txt-after-p)))
+                 (wpers--ovr-txt-after-p))
     (wpers--ovr-kill)))
 
 (provide 'wpers)
