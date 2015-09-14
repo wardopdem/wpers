@@ -26,6 +26,14 @@ Then call command `wpers-mode` for toggle mode
 
         M-x wpers-mode
 
-Call command `wpers-overlay-visible` for toggle visibility of overlay
+Call command `wpers-overlay-visible` (or customise `wpers-pspace`') for toggle visibility of overlay
 
         M-x wpers-overlay-visible
+
+Customize the `wpers-ovr-killing-funs` to define which functions
+reset the vertical position of the cursor (column).
+
+
+
+# Mode constants
+

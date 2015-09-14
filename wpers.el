@@ -37,9 +37,12 @@
 
 ;;         M-x wpers-mode
 
-;; Call command `wpers-overlay-visible` for toggle visibility of overlay
+;; Call command `wpers-overlay-visible` (or customise `wpers-pspace`) for toggle visibility of overlay
 
 ;;         M-x wpers-overlay-visible
+
+;; Customize the `wpers-ovr-killing-funs` to define which functions
+;; reset the vertical position of the cursor (column).
 
 ;;; Code:
 
@@ -208,20 +211,16 @@
 (defmacro wpers--def-remap-fun (org-fun &optional doc-str &rest body)
   "Macro for defining remap-functions (add package prefix to the name)"
   `(defun ,(wpers--intern org-fun) () 
-     ,(or doc-str (format "Same as `%s' but performs correcting or deleting the overlay if it's needed" org-fun)) ,@body))
+     ,(or doc-str (format "Same as `%s' but performs correcting of horisontal cursor position (column) by overlay if it's needed" org-fun)) ,@body))
 
 (defmacro wpers--def-vert (command &optional doc-str) "Auxiliary macro for defining commands that do vertical cursor movement"
   `(wpers--def-remap-fun ,command ,doc-str (interactive) (wpers--save-vpos (call-interactively ',command ))))
 
-(wpers--def-vert next-line "Same as `new-line' but adds the overlay if it's needed
-for saving cursor's position in the line (column)")
-
-(wpers--def-vert previous-line "Same as `previous-line' but adds the overlay if it's needed
-for saving cursor's position in the line (column)")
-
-(wpers--def-vert scroll-up "Scrolling up with saving cursor's position in the line (column)")
-
-(wpers--def-vert scroll-down "Scrolling down with saving cursor's position in the line (column)")
+;; Basic vertical motion operations
+(wpers--def-vert next-line)
+(wpers--def-vert previous-line)
+(wpers--def-vert scroll-up)
+(wpers--def-vert scroll-down)
 
 (defmacro wpers--def-right (command &optional doc-str)
   "Macro for defining commands that do cursor movement to the right"
@@ -236,6 +235,7 @@ for saving cursor's position in the line (column)")
                    (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
            (wpers--ovr-kill) ,expr))))
 
+;; Basic right motion operations
 (wpers--def-right right-char)
 (wpers--def-right forward-char)
 
@@ -252,6 +252,7 @@ for saving cursor's position in the line (column)")
                (wpers--ovr-kill) ,expr)
            ,expr))))
 
+;; Basic left motion operations
 (wpers--def-left left-char)
 (wpers--def-left backward-char)
 (wpers--def-left backward-delete-char)
