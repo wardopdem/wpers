@@ -32,8 +32,3 @@ Call command `wpers-overlay-visible` (or customise `wpers-pspace`') for toggle v
 
 Customize the `wpers-ovr-killing-funs` to define which functions
 reset the vertical position of the cursor (column).
-
-
-
-# Mode constants
-
