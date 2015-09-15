@@ -98,11 +98,10 @@
   [next-line previous-line
    left-char right-char forward-char backward-char 
    backward-delete-char backward-delete-char-untabify
-   move-end-of-line move-beginning-of-line
    scroll-up scroll-down mouse-set-point] 
   "Functions overloaded by the mode")
 
-(defcustom wpers-ovr-killing-funs '(undo)
+(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line) 
   "Functions killing overlay"
   :group 'wpers
   :type '(repeat function))
@@ -268,18 +267,6 @@
 (wpers--def-left backward-delete-char)
 (wpers--def-left backward-delete-char-untabify)
 
-(defun wpers--move-end-of-line ()
-  "Function `move-end-of-line' is called and then removes overlay and all trailing spaces"
-  (interactive)                                    
-  (move-end-of-line nil)
-  (when wpers--overlay (wpers--ovr-kill)))
-
-(defun wpers--move-beginning-of-line ()
-  "Function `move-beginning-of-line' is called and then removes overlay if it's present and line is empty"
-  (interactive)
-  (move-beginning-of-line nil)
-  (when (and wpers--overlay (zerop (current-column))) (wpers--ovr-kill)))
-
 ;; Mouse click
 
 (defun wpers--mouse-set-point (event)
@@ -305,4 +292,3 @@
 
 (provide 'wpers)
 ;;; wpers.el ends here
-
