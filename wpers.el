@@ -46,10 +46,12 @@
 
 ;;; Code:
 
-;;; Mode constants
+;;; Import
 
 (require 'cl)
 (require 'hl-line)
+
+;;; Mode constants, variables 
 
 (defconst wpers--prefix "wpers-" "Package prefix")
 
@@ -65,9 +67,16 @@
   :group 'editing
   :prefix "wpers-")
 
+(defun wpers--get-pspace (sym)
+  (let ((val (symbol-value sym)))
+    (cond 
+      ((eq val 32) nil)
+      ((eq val wpers--pspace-def) t)
+      (t val))))
+
 (defun wpers--set-pspace (var val)
   (setq wpers-pspace 
-        (cond ((null val) (if (= wpers-pspace 32) wpers--pspace-def 32))
+        (cond ((null val)  32)
               ((eq val t) wpers--pspace-def)
               (t val)))
   (mapc #'(lambda (b)
@@ -78,9 +87,10 @@
 
 (defcustom wpers-pspace 32
   "Pseudo-space - char for displaying in the overlay instead of real spaces"
-  :type `(choice (const :tag "Standard visible" ,wpers--pspace-def)
+  :type `(choice (const :tag "Standard visible" t)
                  (const :tag "Invisible" nil)
                  (character :tag "Custom visible"))
+  :get 'wpers--get-pspace
   :set 'wpers--set-pspace
   :set-after '(wpers--pspace-def))
 
@@ -131,7 +141,11 @@
 
 (defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
   (interactive "P")
-  (wpers--set-pspace nil val))
+  (wpers--set-pspace nil (if (null val) t
+                             (if (eq val '-) nil val))))
+  ;; (wpers--set-pspace nil (not val)))
+
+
 
 ;;; Utils
 
@@ -202,16 +216,12 @@
 
 ;;; Mode remap handlers
 
-(defun wpers--mouse-set-point (event)
-  (interactive "e")
-  (mouse-set-point event)
-  (let ((col (car (posn-col-row (cadr event)))))
-    (wpers--move-to-column col)))
-
 (defmacro wpers--def-remap-fun (org-fun &optional doc-str &rest body)
   "Macro for defining remap-functions (add package prefix to the name)"
-  `(defun ,(wpers--intern org-fun) () 
-     ,(or doc-str (format "Same as `%s' but performs correcting of horisontal cursor position (column) by overlay if it's needed" org-fun)) ,@body))
+  (let ((nm (wpers--intern org-fun)))
+;    (add-to-list 'wpers--overloaded-funs nm)
+    `(defun ,nm () 
+       ,(or doc-str (format "Same as `%s' but performs correcting of horisontal cursor position (column) by overlay if it's needed" org-fun)) ,@body)))
 
 (defmacro wpers--def-vert (command &optional doc-str) "Auxiliary macro for defining commands that do vertical cursor movement"
   `(wpers--def-remap-fun ,command ,doc-str (interactive) (wpers--save-vpos (call-interactively ',command ))))
@@ -270,6 +280,14 @@
   (move-beginning-of-line nil)
   (when (and wpers--overlay (zerop (current-column))) (wpers--ovr-kill)))
 
+;; Mouse click
+
+(defun wpers--mouse-set-point (event)
+  (interactive "e")
+  (mouse-set-point event)
+  (let ((col (car (posn-col-row (cadr event)))))
+    (wpers--move-to-column col)))
+
 ;;; Hooks
 
 (defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil or marking is active"
@@ -287,3 +305,4 @@
 
 (provide 'wpers)
 ;;; wpers.el ends here
+
