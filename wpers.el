@@ -85,30 +85,7 @@
                 (wpers--ovr-put (make-string (length (wpers--ovr-get)) wpers-pspace)))))
         (buffer-list)))
 
-(defcustom wpers-pspace 32
-  "Pseudo-space - char for displaying in the overlay instead of real spaces"
-  :type `(choice (const :tag "Standard visible" t)
-                 (const :tag "Invisible" nil)
-                 (character :tag "Custom visible"))
-  :get 'wpers--get-pspace
-  :set 'wpers--set-pspace
-  :set-after '(wpers--pspace-def))
-
-(defconst wpers--overloaded-funs
-  [next-line previous-line
-   left-char right-char forward-char backward-char 
-   backward-delete-char backward-delete-char-untabify
-   scroll-up scroll-down mouse-set-point] 
-  "Functions overloaded by the mode")
-
-(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line) 
-  "Functions killing overlay"
-  :group 'wpers
-  :type '(repeat function))
-
-(defconst wpers--funs-alist
-  (mapcar #'(lambda (x) (cons x (wpers--intern x))) wpers--overloaded-funs)
-  "alist (old . new) functions")
+(defvar wpers--funs-alist nil "alist of remaped functions")
 
 (defconst wpers--mode-map
   (reduce #'(lambda (s x) (define-key s (vector 'remap (car x)) (cdr x)) s)
@@ -131,6 +108,7 @@
   (if wpers-mode
       (progn
         (message "Wpers enabled")
+        (wpers--set-remaps)
         (setq-local wpers--overlay nil)
         (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
       (progn
@@ -138,13 +116,27 @@
         (wpers--ovr-kill)
         (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
 
+(defcustom wpers-pspace 32
+  "Pseudo-space - char for displaying in the overlay instead of real spaces"
+  :type `(choice (const :tag "Standard visible" t)
+                 (const :tag "Invisible" nil)
+                 (character :tag "Custom visible"))
+  :get 'wpers--get-pspace
+  :set 'wpers--set-pspace
+  :set-after '(wpers--pspace-def))
+
 (defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
   (interactive "P")
-  (wpers--set-pspace nil (if (null val) t
-                             (if (eq val '-) nil val))))
-  ;; (wpers--set-pspace nil (not val)))
+  (wpers--set-pspace nil
+    (cond
+      ((null val) t)
+      ((member val  '(- (4))) nil)
+      (t val))))
 
-
+(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line) 
+  "Functions killing overlay"
+  :group 'wpers
+  :type '(repeat function))
 
 ;;; Utils
 
@@ -215,65 +207,65 @@
 
 ;;; Mode remap handlers
 
-(defmacro wpers--def-remap-fun (org-fun &optional doc-str &rest body)
-  "Macro for defining remap-functions (add package prefix to the name)"
-  (let ((nm (wpers--intern org-fun)))
-;    (add-to-list 'wpers--overloaded-funs nm)
-    `(defun ,nm () 
-       ,(or doc-str (format "Same as `%s' but performs correcting of horisontal cursor position (column) by overlay if it's needed" org-fun)) ,@body)))
+(defun wpers--remap (key body &optional params)
+  (let ((old (when (and (vectorp key)
+                        (eq (elt key 0) 'remap)) (elt key 1)))
+        (fun (if (functionp (car body))
+                 (car body)
+                 `(lambda ,params "WPERS handler: perform operation with saving current cursor's position in the line (column)" ,@body))))
+    (when old (add-to-list 'wpers--funs-alist (cons old fun)))
+    (define-key wpers--mode-map key fun)))
 
-(defmacro wpers--def-vert (command &optional doc-str) "Auxiliary macro for defining commands that do vertical cursor movement"
-  `(wpers--def-remap-fun ,command ,doc-str (interactive) (wpers--save-vpos (call-interactively ',command ))))
+(defun wpers--remap-vert (command &optional key)
+  (wpers--remap (or key (vector 'remap command)) 
+                `((interactive) (wpers--save-vpos (call-interactively ',command)))))
+ 
+(defun wpers--remap-right (command &optional key)
+  (let ((key (or key (vector 'remap command)))
+        (expr `(call-interactively ',command)))
+    (wpers--remap key
+       `((interactive)
+         (if (wpers--at-end (point))
+             (if (null wpers--overlay)
+                 (wpers--ovr-make (string wpers-pspace))
+                 (if (wpers--ovr-at-point-p)
+                     (wpers--ovr-put (concat _ (string wpers-pspace)))
+                     (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
+             (wpers--ovr-kill) ,expr)))))
 
-;; Basic vertical motion operations
-(wpers--def-vert next-line)
-(wpers--def-vert previous-line)
-(wpers--def-vert scroll-up)
-(wpers--def-vert scroll-down)
+(defun wpers--remap-left (command &optional key)
+  (let ((key (or key (vector 'remap command)))
+        (expr `(call-interactively ',command)))
+    (wpers--remap key
+       `((interactive)
+         (if wpers--overlay
+             (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
+                 (if (plusp (length (wpers--ovr-get)))
+                     (wpers--ovr-put (substring _ 1))
+                     (wpers--ovr-kill) ,expr)
+                 (wpers--ovr-kill) ,expr)
+             ,expr)))))
 
-(defmacro wpers--def-right (command &optional doc-str)
-  "Macro for defining commands that do cursor movement to the right"
-  (let ((expr `(call-interactively ',command)))
-    `(wpers--def-remap-fun ,command ,doc-str
-       (interactive)
-       (if (wpers--at-end (point))
-           (if (null wpers--overlay)
-               (wpers--ovr-make (string wpers-pspace))
-               (if (wpers--ovr-at-point-p)
-                   (wpers--ovr-put (concat _ (string wpers-pspace)))
-                   (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
-           (wpers--ovr-kill) ,expr))))
+(defun wpers--set-remaps (&optional var val)
+  (mapc #'(lambda (x)
+            (let ((remaper (car x))
+                  (funs (cdr x)))
+              (mapc #'(lambda (f) (funcall remaper f)) funs)))
+        (or val wpers-remaps)))
 
-;; Basic right motion operations
-(wpers--def-right right-char)
-(wpers--def-right forward-char)
-
-(defmacro wpers--def-left (command &optional doc-str)
-  "Macro for defining commands that do cursor movement to the left"
-  (let ((expr `(call-interactively ',command)))
-    `(wpers--def-remap-fun ,command ,doc-str
-       (interactive)
-       (if wpers--overlay
-           (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
-               (if (plusp (length (wpers--ovr-get)))
-                   (wpers--ovr-put (substring _ 1))
-                   (wpers--ovr-kill) ,expr)
-               (wpers--ovr-kill) ,expr)
-           ,expr))))
-
-;; Basic left motion operations
-(wpers--def-left left-char)
-(wpers--def-left backward-char)
-(wpers--def-left backward-delete-char)
-(wpers--def-left backward-delete-char-untabify)
-
-;; Mouse click
-
-(defun wpers--mouse-set-point (event)
+(wpers--remap [remap mouse-set-point] `(
   (interactive "e")
   (mouse-set-point event)
   (let ((col (car (posn-col-row (cadr event)))))
-    (wpers--move-to-column col)))
+    (wpers--move-to-column col))) '(event))
+
+(defcustom wpers-remaps
+  '((wpers--remap-vert  next-line previous-line scroll-up scroll-down)
+    (wpers--remap-left  left-char backward-char backward-delete-char backward-delete-char-untabify)
+    (wpers--remap-right right-char forward-char))
+  ""
+  :options '(wpers--remap-vert wpers--remap-left wpers--remap-right)
+  :type '(alist :key-type symbol :value-type (repeat function)))
 
 ;;; Hooks
 
