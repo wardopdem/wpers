@@ -71,10 +71,7 @@
 
 (defvar wpers--funs-alist nil "alist of remaped functions")
 
-(defconst wpers--mode-map
-  (reduce #'(lambda (s x) (define-key s (vector 'remap (car x)) (cdr x)) s)
-          wpers--funs-alist :initial-value (make-sparse-keymap))
-  "Mode map for `wpers'")
+(defconst wpers--mode-map (make-sparse-keymap) "Mode map for `wpers'")
 
 (defconst wreps--hooks-alist
   '((pre-command-hook  . wpers--pre-command-hook)
@@ -155,8 +152,10 @@
 ;;; Mode remap handlers
 
 (defun wpers--remap (key body &optional params)
-  (let ((old (when (and (vectorp key)
-                        (eq (elt key 0) 'remap)) (elt key 1)))
+  (let ((old (if (and (vectorp key)
+                      (eq (elt key 0) 'remap))
+                 (elt key 1)
+                 (key-binding key)))
         (fun (if (functionp (car body))
                  (car body)
                  `(lambda ,params "WPERS handler: perform operation with saving current cursor's position in the line (column)" ,@body))))
