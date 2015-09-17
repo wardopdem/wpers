@@ -46,11 +46,13 @@
 
 ;;; Code:
 
+;;;;;;;;;;
 ;;; Import
 
 (require 'cl)
 (require 'hl-line)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode constants, variables 
 
 (defconst wpers--prefix "wpers-" "Package prefix")
@@ -67,24 +69,6 @@
   :group 'editing
   :prefix "wpers-")
 
-(defun wpers--get-pspace (sym)
-  (let ((val (symbol-value sym)))
-    (cond 
-      ((eq val 32) nil)
-      ((eq val wpers--pspace-def) t)
-      (t val))))
-
-(defun wpers--set-pspace (var val)
-  (setq wpers-pspace 
-        (cond ((null val)  32)
-              ((eq val t) wpers--pspace-def)
-              (t val)))
-  (mapc #'(lambda (b)
-            (with-current-buffer b
-              (when (and (local-variable-p 'wpers-mode) wpers-mode wpers--overlay)
-                (wpers--ovr-put (make-string (length (wpers--ovr-get)) wpers-pspace)))))
-        (buffer-list)))
-
 (defvar wpers--funs-alist nil "alist of remaped functions")
 
 (defconst wpers--mode-map
@@ -97,47 +81,7 @@
     (post-command-hook . wpers--post-command-hook))
   "alist (hook-var . hook-function)")
 
-;;; Mode public interface
-
-(define-minor-mode wpers-mode
-  "Toggle persistent cursor mode."
-  :init-value nil
-  :lighter " wpers"
-  :group 'wpers
-  :keymap wpers--mode-map
-  (if wpers-mode
-      (progn
-        (message "Wpers enabled")
-        (wpers--set-remaps)
-        (setq-local wpers--overlay nil)
-        (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
-      (progn
-        (message "Wpers disabled")         
-        (wpers--ovr-kill)
-        (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
-
-(defcustom wpers-pspace 32
-  "Pseudo-space - char for displaying in the overlay instead of real spaces"
-  :type `(choice (const :tag "Standard visible" t)
-                 (const :tag "Invisible" nil)
-                 (character :tag "Custom visible"))
-  :get 'wpers--get-pspace
-  :set 'wpers--set-pspace
-  :set-after '(wpers--pspace-def))
-
-(defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
-  (interactive "P")
-  (wpers--set-pspace nil
-    (cond
-      ((null val) t)
-      ((member val  '(- (4))) nil)
-      (t val))))
-
-(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line) 
-  "Functions killing overlay"
-  :group 'wpers
-  :type '(repeat function))
-
+;;;;;;;;;
 ;;; Utils
 
 (defmacro wpers--at-end (&optional expr)
@@ -146,6 +90,7 @@
     `(let ((,ch (char-after ,expr)))
        (or (null ,ch) (eq ,ch 10)))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
 
 (defun wpers--ovr-propz-txt (txt) "Propertize TXT for overlay displaying"
@@ -186,6 +131,7 @@
   `(let ((_ (wpers--ovr-get)))
     (overlay-put wpers--overlay 'before-string (wpers--ovr-propz-txt ,val))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Column managing functions
 
 (defun wpers--current-column () "Same as `current-column' but it takes account size of overlay if it present"
@@ -205,6 +151,7 @@
   (let ((old-col (make-symbol "old-col")))
     `(let ((,old-col (wpers--current-column))) ,form (wpers--move-to-column ,old-col))))
 
+;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode remap handlers
 
 (defun wpers--remap (key body &optional params)
@@ -246,27 +193,13 @@
                  (wpers--ovr-kill) ,expr)
              ,expr)))))
 
-(defun wpers--set-remaps (&optional var val)
-  (mapc #'(lambda (x)
-            (let ((remaper (car x))
-                  (funs (cdr x)))
-              (mapc #'(lambda (f) (funcall remaper f)) funs)))
-        (or val wpers-remaps)))
-
 (wpers--remap [remap mouse-set-point] `(
   (interactive "e")
   (mouse-set-point event)
   (let ((col (car (posn-col-row (cadr event)))))
     (wpers--move-to-column col))) '(event))
 
-(defcustom wpers-remaps
-  '((wpers--remap-vert  next-line previous-line scroll-up scroll-down)
-    (wpers--remap-left  left-char backward-char backward-delete-char backward-delete-char-untabify)
-    (wpers--remap-right right-char forward-char))
-  ""
-  :options '(wpers--remap-vert wpers--remap-left wpers--remap-right)
-  :type '(alist :key-type symbol :value-type (repeat function)))
-
+;;;;;;;;;
 ;;; Hooks
 
 (defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil or marking is active"
@@ -281,6 +214,87 @@
              (or (not (wpers--ovr-at-point-p))
                  (wpers--ovr-txt-after-p)))
     (wpers--ovr-kill)))
+
+;;;;;;;;;;;;;;;;;;;;
+;;; Custom accessors
+
+(defun wpers--get-pspace (sym)
+  (let ((val (symbol-value sym)))
+    (cond 
+      ((eq val 32) nil)
+      ((eq val wpers--pspace-def) t)
+      (t val))))
+
+(defun wpers--set-pspace (var val)
+  (setq wpers-pspace 
+        (cond ((null val)  32)
+              ((eq val t) wpers--pspace-def)
+              (t val)))
+  (mapc #'(lambda (b)
+            (with-current-buffer b
+              (when (and (local-variable-p 'wpers-mode) wpers-mode wpers--overlay)
+                (wpers--ovr-put (make-string (length (wpers--ovr-get)) wpers-pspace)))))
+        (buffer-list)))
+
+(defun wpers--set-remaps (var val)
+  (set-default var val)
+  (mapc #'(lambda (x) (when (not (eq (car x) 'mouse-set-point)) (define-key wpers--mode-map (vector 'remap (car x)) nil)))
+        wpers--funs-alist)
+  (mapc #'(lambda (x)
+            (let ((remaper (car x))
+                  (funs (cdr x)))
+              (mapc #'(lambda (f) (funcall remaper f)) funs)))
+        (or val wpers-remaps)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Mode public interface
+
+(define-minor-mode wpers-mode
+  "Toggle persistent cursor mode."
+  :init-value nil
+  :lighter " wpers"
+  :group 'wpers
+  :keymap wpers--mode-map
+  (if wpers-mode
+      (progn
+        (message "Wpers enabled")
+        (setq-local wpers--overlay nil)
+        (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
+      (progn
+        (message "Wpers disabled")         
+        (wpers--ovr-kill)
+        (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
+
+(defcustom wpers-pspace 32
+  "Pseudo-space - char for displaying in the overlay instead of real spaces"
+  :type `(choice (const :tag "Standard visible" t)
+                 (const :tag "Invisible" nil)
+                 (character :tag "Custom visible"))
+  :get 'wpers--get-pspace
+  :set 'wpers--set-pspace
+  :set-after '(wpers--pspace-def))
+
+(defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
+  (interactive "P")
+  (wpers--set-pspace nil
+    (cond
+      ((null val) t)
+      ((member val  '(- (4))) nil)
+      (t val))))
+
+(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line) 
+  "Functions killing overlay"
+  :group 'wpers
+  :type '(repeat function))
+
+(defcustom wpers-remaps
+  '((wpers--remap-vert  next-line previous-line scroll-up scroll-down)
+    (wpers--remap-left  left-char backward-char backward-delete-char backward-delete-char-untabify)
+    (wpers--remap-right right-char forward-char))
+  ""
+  :options '(wpers--remap-vert wpers--remap-left wpers--remap-right)
+  :type '(alist :key-type symbol :value-type (repeat function))
+  :set 'wpers--set-remaps)
 
 (provide 'wpers)
 ;;; wpers.el ends here
