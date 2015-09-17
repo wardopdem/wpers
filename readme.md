@@ -17,7 +17,7 @@ with saving his position at the line (column).
 
 # Installation & using
 
-Just add wpers.el folder location to load-path and call require (f.e. in your init)
+Just add wpers.el folder location to load-path and call `require`
 
         (add-to-list 'load-path <path-to-wpers>)
         (require 'wpers)
@@ -26,9 +26,13 @@ Then call command `wpers-mode` for toggle mode
 
         M-x wpers-mode
 
-Call command `wpers-overlay-visible` (or customise `wpers-pspace`) for toggle visibility of overlay
+# Сustomization
 
-        M-x wpers-overlay-visible
+Call command `wpers-overlay-visible` or customise `wpers-pspace`
+for toggle visibility of overlay.
 
-Customize the `wpers-ovr-killing-funs` to define which functions
+Customize `wpers-ovr-killing-funs` to define which functions
 reset the vertical position of the cursor (column).
+
+Set the `wpers--remaps` to define the list of functions saving
+the vertical position of the cursor (column).
