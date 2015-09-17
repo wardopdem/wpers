@@ -3,7 +3,7 @@
 ;; Copyright (C) 2015 <wardopdem@gmail.com>
 
 ;; Authors:         wardopdem@gmail.com
-;; Version:         2.0.0
+;; Version:         2.1
 ;; URL:             <https://github.com/wardopdem/wpers>
 ;; Keywords:        persistent, cursor
 
@@ -86,6 +86,15 @@
         (ch (make-symbol "ch")))
     `(let ((,ch (char-after ,expr)))
        (or (null ,ch) (eq ,ch 10)))))
+(defun wpers--remap-p (key)
+  (and (vectorp key)
+       (eq (elt key 0) 'remap)))
+
+(defun wpers--key-handler (key)
+  (if (wpers--remap-p key) (elt key 1) (key-binding key)))
+
+(defun wpers--mk-key (command &optional key)
+  (or key (vector 'remap command)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
@@ -152,10 +161,7 @@
 ;;; Mode remap handlers
 
 (defun wpers--remap (key body &optional params)
-  (let ((old (if (and (vectorp key)
-                      (eq (elt key 0) 'remap))
-                 (elt key 1)
-                 (key-binding key)))
+  (let ((old (wpers--key-handler key))
         (fun (if (functionp (car body))
                  (car body)
                  `(lambda ,params "WPERS handler: perform operation with saving current cursor's position in the line (column)" ,@body))))
@@ -163,11 +169,11 @@
     (define-key wpers--mode-map key fun)))
 
 (defun wpers--remap-vert (command &optional key)
-  (wpers--remap (or key (vector 'remap command)) 
+  (wpers--remap (wpers--mk-key command key) 
                 `((interactive) (wpers--save-vpos (call-interactively ',command)))))
  
 (defun wpers--remap-right (command &optional key)
-  (let ((key (or key (vector 'remap command)))
+  (let ((key (wpers--mk-key command key))
         (expr `(call-interactively ',command)))
     (wpers--remap key
        `((interactive)
@@ -180,7 +186,7 @@
              (wpers--ovr-kill) ,expr)))))
 
 (defun wpers--remap-left (command &optional key)
-  (let ((key (or key (vector 'remap command)))
+  (let ((key (wpers--mk-key command key))
         (expr `(call-interactively ',command)))
     (wpers--remap key
        `((interactive)

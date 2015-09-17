@@ -3,7 +3,7 @@
 Copyright (C) 2015 <wardopdem@gmail.com>
 
 * Authors:         wardopdem@gmail.com
-* Version:         2.0.0
+* Version:         2.1
 * URL:             <https://github.com/wardopdem/wpers>
 * Keywords:        persistent, cursor
 
@@ -26,7 +26,7 @@ Then call command `wpers-mode` for toggle mode
 
         M-x wpers-mode
 
-Call command `wpers-overlay-visible` (or customise `wpers-pspace`') for toggle visibility of overlay
+Call command `wpers-overlay-visible` (or customise `wpers-pspace`) for toggle visibility of overlay
 
         M-x wpers-overlay-visible
 
