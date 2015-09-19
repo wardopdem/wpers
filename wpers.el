@@ -179,6 +179,7 @@
 ;;; Mode remap handlers
 
 (defun wpers--remap (key body &optional params)
+  "The basic function of creating wrappers for cursor positioning commands."
   (let ((old (wpers--key-handler key))
         (fun `(lambda ,params 
                 "WPERS handler: perform operation with saving current cursor's position in the line (column)."
@@ -190,20 +191,6 @@
   "Define to KEY or remap vertical motion COMMAND with saving the position of the cursor in the row (column)."
   (wpers--remap (wpers--mk-key command key) 
                 `((interactive)(wpers--save-vpos (call-interactively ',command)))))
- 
-(defun wpers--remap-right (command &optional key)
-  "Define to KEY or remap left motion COMMAND with making or enlarging of overlay if needed."
-  (let ((key (wpers--mk-key command key))
-        (expr `(call-interactively ',command)))
-    (wpers--remap key
-       `((interactive)
-         (if (wpers--at-end (point))
-             (if (null wpers--overlay)
-                 (wpers--ovr-make (string wpers-pspace))
-                 (if (wpers--ovr-at-point-p)
-                     (wpers--ovr-put (concat _ (string wpers-pspace)))
-                     (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
-             (wpers--ovr-kill) ,expr)))))
 
 (defun wpers--remap-left (command &optional key)
   "Define to KEY or remap right motion COMMAND with shrinking or deleting of overlay if needed."
@@ -218,6 +205,20 @@
                      (wpers--ovr-kill) ,expr)
                  (wpers--ovr-kill) ,expr)
              ,expr)))))
+ 
+(defun wpers--remap-right (command &optional key)
+  "Define to KEY or remap left motion COMMAND with making or enlarging of overlay if needed."
+  (let ((key (wpers--mk-key command key))
+        (expr `(call-interactively ',command)))
+    (wpers--remap key
+       `((interactive)
+         (if (wpers--at-end (point))
+             (if (null wpers--overlay)
+                 (wpers--ovr-make (string wpers-pspace))
+                 (if (wpers--ovr-at-point-p)
+                     (wpers--ovr-put (concat _ (string wpers-pspace)))
+                     (wpers--ovr-kill) (wpers--ovr-make (string wpers-pspace))))
+             (wpers--ovr-kill) ,expr)))))
 
 (defun wpers--remap-mouse (command)
   "Remap mouse-related COMMAND with positioning cursor at mouse pointer."
@@ -334,7 +335,7 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   LIST-OF-COMMANDS - list of commands (like `next-line') or looks like (COMMAND KEY)
                        where KEY is a string intended for `kbd' processing"
   :options '(wpers--remap-vert wpers--remap-left wpers--remap-right wpers--remap-mouse)
-  :type '(alist :key-type symbol :value-type (repeat function))
+  :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string))))
   :set 'wpers--set-remaps)
 
 ;; Destroying ot the overlays in all inactive buffers
