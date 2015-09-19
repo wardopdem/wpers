@@ -3,7 +3,7 @@
 ;; Copyright (C) 2015 <wardopdem@gmail.com>
 
 ;; Authors:         wardopdem@gmail.com
-;; Version:         2.1
+;; Version:         2.2
 ;; URL:             <https://github.com/wardopdem/wpers>
 ;; Keywords:        persistent, cursor
 
