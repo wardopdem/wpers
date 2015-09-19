@@ -82,7 +82,8 @@
 ;;;;;;;;;
 ;;; Utils
 
-(defmacro wpers--at-end (&optional expr) "Return non-nil if end of line/buffer be found at EXPR."
+(defmacro wpers--at-end (&optional expr)
+  "Return non-nil if end of line or buffer be found at EXPR location."
   (let ((expr (or expr '(overlay-start wpers--overlay)))
         (ch (make-symbol "ch")))
     `(let ((,ch (char-after ,expr)))
@@ -179,18 +180,19 @@
 
 (defun wpers--remap (key body &optional params)
   (let ((old (wpers--key-handler key))
-        (fun (if (functionp (car body))
-                 (car body)
-                 `(lambda ,params "WPERS handler: perform operation with saving current cursor's position in the line (column)." ,@body))))
+        (fun `(lambda ,params 
+                "WPERS handler: perform operation with saving current cursor's position in the line (column)."
+                ,@body)))
     (when old (add-to-list 'wpers--funs-alist (cons old fun)))
     (define-key wpers--mode-map key fun)))
 
 (defun wpers--remap-vert (command &optional key)
-  "Run vertical motion COMMAND with saving the position of the cursor in the row (column)."
+  "Define to KEY or remap vertical motion COMMAND with saving the position of the cursor in the row (column)."
   (wpers--remap (wpers--mk-key command key) 
-                `((interactive) (wpers--save-vpos (call-interactively ',command)))))
+                `((interactive)(wpers--save-vpos (call-interactively ',command)))))
  
 (defun wpers--remap-right (command &optional key)
+  "Define to KEY or remap left motion COMMAND with making or enlarging of overlay if needed."
   (let ((key (wpers--mk-key command key))
         (expr `(call-interactively ',command)))
     (wpers--remap key
@@ -204,6 +206,7 @@
              (wpers--ovr-kill) ,expr)))))
 
 (defun wpers--remap-left (command &optional key)
+  "Define to KEY or remap right motion COMMAND with shrinking or deleting of overlay if needed."
   (let ((key (wpers--mk-key command key))
         (expr `(call-interactively ',command)))
     (wpers--remap key
@@ -217,6 +220,7 @@
              ,expr)))))
 
 (defun wpers--remap-mouse (command)
+  "Remap mouse-related COMMAND with positioning cursor at mouse pointer."
   (wpers--remap (vector 'remap command) `(
     (interactive "e")
     (funcall ',command event)
@@ -226,14 +230,15 @@
 ;;;;;;;;;
 ;;; Hooks
 
-(defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil or marking is active"
+(defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil 
+or marking is active or truncate-lines is nil."
   (if (member this-command wpers-ovr-killing-funs)
       (wpers--ovr-kill)
       (if (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
           (let ((fn-pair (rassoc this-command wpers--funs-alist)))
             (when fn-pair (setq this-command (car fn-pair)))))))
 
-(defun wpers--post-command-hook () "Killing wpers--overlay when it is not at the point"
+(defun wpers--post-command-hook () "Killing wpers--overlay when it is not at the point or text happens after it."
   (when (and wpers--overlay
              (or (not (wpers--ovr-at-point-p))
                  (wpers--ovr-txt-after-p)))
@@ -243,6 +248,7 @@
 ;;; Custom accessors
 
 (defun wpers--get-pspace (sym)
+  "Getter for custom `wpers-pspace'"
   (let ((val (symbol-value sym)))
     (cond 
       ((eq val 32) nil)
@@ -250,6 +256,7 @@
       (t val))))
 
 (defun wpers--set-pspace (var val)
+  "Setter for custom `wpers-pspace'"
   (setq wpers-pspace 
         (cond ((null val)  32)
               ((eq val t) wpers--pspace-def)
@@ -261,13 +268,17 @@
         (buffer-list)))
 
 (defun wpers--set-remaps (var val)
+  "Setter for custom `wpers-remaps'"
   (set-default var val)
   (mapc #'(lambda (x) (define-key wpers--mode-map (vector 'remap (car x)) nil))
         wpers--funs-alist)
   (mapc #'(lambda (x)
             (let ((remaper (car x))
                   (funs (cdr x)))
-              (mapc #'(lambda (f) (funcall remaper f)) funs)))
+              (mapc #'(lambda (f)
+                        (if (listp f)
+                            (funcall remaper (car f) (kbd (cadr f)))
+                            (funcall remaper f))) funs)))
         (or val wpers-remaps)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -312,15 +323,21 @@
   :type '(repeat function))
 
 (defcustom wpers-remaps
-  '((wpers--remap-vert  next-line previous-line scroll-up scroll-down)
+  '((wpers--remap-vert  next-line previous-line scroll-up-command scroll-down-command
+                        (scroll-down-command "<prior>") (scroll-up-command "<next>")) ; for CUA mode
     (wpers--remap-left  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--remap-right right-char forward-char)
     (wpers--remap-mouse mouse-set-point))
-  ""
+  "alist which is linking general remap-functions with commands.
+Each element looks like (HANDLER . LIST-OF-COMMANDS) where
+  HANDLER          - one of wpers--remap-xxx functions, 
+  LIST-OF-COMMANDS - list of commands (like `next-line') or looks like (COMMAND KEY)
+                       where KEY is a string intended for `kbd' processing"
   :options '(wpers--remap-vert wpers--remap-left wpers--remap-right wpers--remap-mouse)
   :type '(alist :key-type symbol :value-type (repeat function))
   :set 'wpers--set-remaps)
 
+;; Destroying ot the overlays in all inactive buffers
 (add-hook 'post-command-hook 'wpers--clean-up-ovrs)
 
 (provide 'wpers)
