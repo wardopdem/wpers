@@ -105,13 +105,14 @@
 
 (defun wpers--ovr-propz-txt (txt) "Propertize TXT for overlay displaying."
   (if (or hl-line-mode global-hl-line-mode)
-      (propertize txt 'face (list :background (face-attribute 'highlight :background)))
+      (propertize txt 'face (list :background (face-attribute 'hl-line :background nil t)))
       txt))
 
 (defun wpers--ovr-make (&optional str) "Creating overlay with optional setting before-string to STR."
   (wpers--ovr-kill)
   (setq wpers--overlay (make-overlay (point) (point)))
   (overlay-put wpers--overlay 'wpers t)
+  (overlay-put wpers--overlay 'window (selected-window))
   (if str (overlay-put wpers--overlay 'before-string (wpers--ovr-propz-txt str))))
 
 (defun wpers--ovr-at-point-p () "Return t if wpers--overlay was placed at the point."
