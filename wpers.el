@@ -151,7 +151,7 @@
                          ;(buffer-local-value 'wpers--overlay b)
                          (not (eq b (current-buffer))))
                 (wpers--ovr-kill b)))
-        (remove-if 'get-buffer-window (buffer-list))))
+        (buffer-list)))
 
 (defun wpers--ovr-len () "Get wpers--overlay before-string property."
    (length (overlay-get wpers--overlay 'before-string)))
@@ -229,16 +229,16 @@
 (defun wpers--remap-mouse (command)
   "Remap mouse-related COMMAND with positioning cursor at mouse pointer."
   (wpers--remap (vector 'remap command) `(
-    (interactive "e")
-    (funcall ',command event)
-    (let ((col (car (posn-col-row (cadr event)))))
-      (wpers--move-to-column col))) '(event)))
+    (interactive)
+    (call-interactively ',command)
+    (let ((col (car (posn-col-row (cadr last-input-event)))))
+      (wpers--move-to-column col)))))
 
 ;;;;;;;;;
 ;;; Hooks
 
-(defun wpers--pre-command () "Disabling functionality when visual-line-mode is non-nil 
-or marking is active or truncate-lines is nil."
+(defun wpers--pre-command () "Disabling functionality when visual-line-mode is non-nil,
+marking is active, truncate-lines is nil or command in `wpers-ovr-killing-funs'."
   (if (member this-command wpers-ovr-killing-funs)
       (wpers--ovr-kill)
       (if (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
