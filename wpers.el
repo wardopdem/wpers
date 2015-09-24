@@ -75,8 +75,8 @@
 (defconst wpers--mode-map (make-sparse-keymap) "Wpers-mode keymap.")
 
 (defconst wreps--hooks-alist
-  '((pre-command-hook  . wpers--pre-command-hook)
-    (post-command-hook . wpers--post-command-hook))
+  '((pre-command-hook  . wpers--pre-command)
+    (post-command-hook . wpers--post-command))
   "alist (hook-var . hook-function) for wpers-mode.")
 
 ;;;;;;;;;
@@ -104,7 +104,11 @@
 ;;; Overlay managing functions
 
 (defun wpers--ovr-propz-txt (txt) "Propertize TXT for overlay displaying."
-  (if (or hl-line-mode global-hl-line-mode)
+  (if (or (and (default-boundp 'global-hl-line-mode) 
+                global-hl-line-mode)
+          (and (default-boundp 'hl-line-mode) 
+               hl-line-mode 
+               (buffer-local-value 'hl-line-overlay)))
       (propertize txt 'face (list :background (face-attribute 'hl-line :background nil t)))
       txt))
 
@@ -233,7 +237,7 @@
 ;;;;;;;;;
 ;;; Hooks
 
-(defun wpers--pre-command-hook () "Disabling functionality when visual-line-mode is non-nil 
+(defun wpers--pre-command () "Disabling functionality when visual-line-mode is non-nil 
 or marking is active or truncate-lines is nil."
   (if (member this-command wpers-ovr-killing-funs)
       (wpers--ovr-kill)
@@ -241,7 +245,7 @@ or marking is active or truncate-lines is nil."
           (let ((fn-pair (rassoc this-command wpers--funs-alist)))
             (when fn-pair (setq this-command (car fn-pair)))))))
 
-(defun wpers--post-command-hook () "Killing wpers--overlay when it is not at the point or text happens after it."
+(defun wpers--post-command () "Killing wpers--overlay when it is not at the point or text happens after it."
   (when wpers--overlay
     (overlay-put wpers--overlay 'window (selected-window))
     (when  (or (not (wpers--ovr-at-point-p))
