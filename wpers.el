@@ -82,23 +82,14 @@
 ;;;;;;;;;
 ;;; Utils
 
-(defmacro wpers--at-end (&optional expr)
-  "Return non-nil if end of line or buffer be found at EXPR location."
-  (let ((expr (or expr '(overlay-start wpers--overlay)))
-        (ch (make-symbol "ch")))
-    `(let ((,ch (char-after ,expr)))
-       (or (null ,ch) (eq ,ch ?\n)))))
+(defun wpers--NOP-command () "NOP interactive function"
+  (interactive))
 
-(defun wpers--remap-p (key) "Return non-nil if KEY is remapping."
-  (and (vectorp key)
-       (eq (elt key 0) 'remap)))
-
-(defun wpers--key-handler (key) "Return the handler for a KEY."
-  (if (wpers--remap-p key) (elt key 1) (key-binding key)))
-
-(defun wpers--mk-key (command &optional key)
-  "Return KEY or remapping for a COMMAND."
-  (or key (vector 'remap command)))
+(defun wpers--at-end (&optional ovr)
+  "Return non-nil if end of line or buffer be found at overlay 
+(ovr is non-nil) or point (default) location."
+  (let ((ch (char-after (if ovr (overlay-start wpers--overlay) (point)))))
+       (or (null ch) (eq ch ?\n))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
@@ -126,7 +117,7 @@
   (eq (point) (overlay-start wpers--overlay)))
 
 (defun wpers--ovr-txt-after-p () "Return t if exists something after overlay."
-  (and wpers--overlay (not (wpers--at-end)))) 
+  (and wpers--overlay (not (wpers--at-end t)))) 
 
 (defun wpers--ovr-to-spcs () "Replacing overlay (wpers--overlay) with space chars."
   (let ((ovr-size (when (wpers--ovr-at-point-p) (wpers--ovr-len))))
@@ -139,7 +130,7 @@
   "Killing of the wpers--overlay with the replacement of spacess, if necessary."
   (with-current-buffer (or buffer (current-buffer))
     (when wpers--overlay
-      (when (not (wpers--at-end)) (wpers--ovr-to-spcs))
+      (when (not (wpers--at-end t)) (wpers--ovr-to-spcs))
       (delete-overlay wpers--overlay)
       (setq wpers--overlay nil))))
 
@@ -177,80 +168,58 @@
          (spcs-needed (- col last-column)))
     (when (plusp spcs-needed) (wpers--ovr-make spcs-needed))))
 
-(defmacro wpers--save-column (form) "Eval form with saving current cursor's position in the line (column)."
-  (let ((old-col (make-symbol "old-col")))
-    `(let ((,old-col (wpers--current-column))) ,form (wpers--move-to-column ,old-col))))
+(defun wpers--remap-vert (command)
+  (let ((old-col (wpers--current-column)))
+    (call-interactively command)
+    (wpers--move-to-column old-col)))
 
-;;;;;;;;;;;;;;;;;;;;;;;
-;;; Mode remap handlers
+(defun wpers--remap-left (command)
+  (if wpers--overlay
+      (if (and (wpers--ovr-at-point-p) (wpers--at-end))
+          (if (plusp (wpers--ovr-len))
+              (wpers--ovr-put (1- (wpers--ovr-len)))
+              (wpers--ovr-kill) (call-interactively command))
+          (wpers--ovr-kill) (call-interactively command))
+      (call-interactively command)))
 
-(defun wpers--remap (key body &optional params)
-  "The basic function of creating wrappers for cursor positioning commands."
-  (let ((old (wpers--key-handler key))
-        (fun `(lambda ,params 
-                "WPERS handler: perform operation with saving current cursor's position in the line (column)."
-                ,@body)))
-    (when old (add-to-list 'wpers--funs-alist (cons old fun)))
-    (define-key wpers--mode-map key fun)))
-
-(defun wpers--remap-vert (command &optional key)
-  "Define to KEY or remap vertical motion COMMAND with saving the position of the cursor in the row (column)."
-  (wpers--remap (wpers--mk-key command key) 
-                `((interactive)(wpers--save-column (call-interactively ',command)))))
-
-(defun wpers--remap-left (command &optional key)
-  "Define to KEY or remap right motion COMMAND with shrinking or deleting of overlay if needed."
-  (let ((key (wpers--mk-key command key))
-        (expr `(call-interactively ',command)))
-    (wpers--remap key
-       `((interactive)
-         (if wpers--overlay
-             (if (and (wpers--ovr-at-point-p) (wpers--at-end (point)))
-                 (if (plusp (wpers--ovr-len))
-                     (wpers--ovr-put (1- (wpers--ovr-len)))
-                     (wpers--ovr-kill) ,expr)
-                 (wpers--ovr-kill) ,expr)
-             ,expr)))))
- 
-(defun wpers--remap-right (command &optional key)
-  "Define to KEY or remap left motion COMMAND with making or enlarging of overlay if needed."
-  (let ((key (wpers--mk-key command key))
-        (expr `(call-interactively ',command)))
-    (wpers--remap key
-       `((interactive)
-         (if (wpers--at-end (point))
-             (if (null wpers--overlay)
-                 (wpers--ovr-make 1)
-                 (if (wpers--ovr-at-point-p)
-                     (wpers--ovr-put (1+ (wpers--ovr-len)))
-                     (wpers--ovr-kill) (wpers--ovr-make 1)))
-             (wpers--ovr-kill) ,expr)))))
+(defun wpers--remap-right (command)
+  (if (wpers--at-end)
+      (if (null wpers--overlay)
+          (wpers--ovr-make 1)
+          (if (wpers--ovr-at-point-p)
+              (wpers--ovr-put (1+ (wpers--ovr-len)))
+              (wpers--ovr-kill) (wpers--ovr-make 1)))
+      (wpers--ovr-kill) (call-interactively command)))
 
 (defun wpers--remap-mouse (command)
-  "Remap mouse-related COMMAND with positioning cursor at mouse pointer."
-  (wpers--remap (vector 'remap command) `(
-    (interactive)
-    (call-interactively ',command)
-    (let ((col (car (posn-col-row (cadr last-input-event)))))
-      (wpers--move-to-column col)))))
+  (call-interactively command)
+  (wpers--move-to-column (car (posn-col-row (cadr last-input-event)))))
 
 ;;;;;;;;;
 ;;; Hooks
+
+(defun wpers--command-type (&optional command)
+  (let* ((command (or command this-command))
+         (rmp (find-if #'(lambda (x) (member command (cdr x))) wpers-remaps)))
+    (when rmp (car rmp))))
 
 (defun wpers--pre-command () "Disabling functionality when visual-line-mode is non-nil,
 marking is active, truncate-lines is nil or command in `wpers-ovr-killing-funs'."
   (if (member this-command wpers-ovr-killing-funs)
       (wpers--ovr-kill)
-      (if (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
-          (let ((fn-pair (rassoc this-command wpers--funs-alist)))
-            (when fn-pair (setq this-command (car fn-pair)))))))
+      (let ((type (wpers--command-type)))
+        (when type
+          (unless (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
+            (condition-case err (funcall type this-command)
+              (error (message (error-message-string err)) (beep)))
+            (setq this-command 'wpers--NOP-command))))))
 
 (defun wpers--post-command () "Killing wpers--overlay when it is not at the point or text happens after it."
   (when wpers--overlay
     (overlay-put wpers--overlay 'window (selected-window))
     (when  (or (not (wpers--ovr-at-point-p))
                (wpers--ovr-txt-after-p))
-      (wpers--ovr-kill))))
+      (wpers--ovr-kill))))                      
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; Custom accessors
@@ -286,7 +255,8 @@ marking is active, truncate-lines is nil or command in `wpers-ovr-killing-funs'.
               (mapc #'(lambda (f)
                         (if (listp f)
                             (funcall remaper (car f) (kbd (cadr f)))
-                            (funcall remaper f))) funs)))
+                            (funcall remaper f)))
+                    funs)))
         (or val wpers-remaps)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -301,10 +271,10 @@ marking is active, truncate-lines is nil or command in `wpers-ovr-killing-funs'.
   (if wpers-mode
       (progn
         (message "Wpers enabled")
-        (setq-local wpers--overlay nil)
+        (setq wpers--overlay nil)
         (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
       (progn
-        (message "Wpers disabled")         
+        (message "Wpers disabled")
         (wpers--ovr-kill)
         (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
 
@@ -331,8 +301,8 @@ marking is active, truncate-lines is nil or command in `wpers-ovr-killing-funs'.
   :type '(repeat function))
 
 (defcustom wpers-remaps
-  '((wpers--remap-vert  next-line previous-line scroll-up-command scroll-down-command
-                        (scroll-down-command "<prior>") (scroll-up-command "<next>")) ; for CUA mode
+  '((wpers--remap-vert  next-line previous-line scroll-up-command scroll-down-command cua-scroll-down cua-scroll-up)
+;                        (scroll-down-command "<prior>") (scroll-up-command "<next>")) ; for CUA mode
     (wpers--remap-left  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--remap-right right-char forward-char)
     (wpers--remap-mouse mouse-set-point))
@@ -342,8 +312,8 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   LIST-OF-COMMANDS - list of commands (like `next-line') or looks like (COMMAND KEY)
                        where KEY is a string intended for `kbd' processing"
   :options '(wpers--remap-vert wpers--remap-left wpers--remap-right wpers--remap-mouse)
-  :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string))))
-  :set 'wpers--set-remaps)
+  :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string)))))
+;  :set 'wpers--set-remaps)
 
 ;; Destroying ot the overlays in all inactive buffers
 (add-hook 'post-command-hook 'wpers--clean-up-ovrs)
