@@ -268,21 +268,6 @@
                 (wpers--ovr-put (wpers--ovr-len)))))
         (buffer-list)))
 
-(defun wpers--set-remaps (var val)
-  "Setter for custom `wpers-remaps'"
-  (set-default var val)
-  (mapc #'(lambda (x) (define-key wpers--mode-map (vector 'remap (car x)) nil))
-        wpers--funs-alist)
-  (mapc #'(lambda (x)
-            (let ((remaper (car x))
-                  (funs (cdr x)))
-              (mapc #'(lambda (f)
-                        (if (listp f)
-                            (funcall remaper (car f) (kbd (cadr f)))
-                            (funcall remaper f)))
-                    funs)))
-        (or val wpers-remaps)))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode public interface
 
@@ -326,7 +311,6 @@
 
 (defcustom wpers-remaps
   '((wpers--vert-handler  next-line previous-line scroll-up-command scroll-down-command cua-scroll-down cua-scroll-up)
-;                        (scroll-down-command "<prior>") (scroll-up-command "<next>")) ; for CUA mode
     (wpers--left-handler  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--right-handler right-char forward-char)
     (wpers--mouse-handler mouse-set-point))
