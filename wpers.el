@@ -310,7 +310,7 @@
   :type '(repeat function))
 
 (defcustom wpers-remaps
-  '((wpers--vert-handler  next-line previous-line scroll-up-command scroll-down-command cua-scroll-down cua-scroll-up)
+  '((wpers--vert-handler  next-line previous-line scroll-up-command scroll-down-command cua-scroll-down cua-scroll-up scroll-up-line scroll-down-line)
     (wpers--left-handler  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--right-handler right-char forward-char)
     (wpers--mouse-handler mouse-set-point))
