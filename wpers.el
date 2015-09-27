@@ -148,33 +148,51 @@
       (delete-overlay wpers--overlay)
       (setq wpers--overlay nil))))
 
+;;***********************************
+
 (defun wpers--ovr-to-shadow (w)
-  (when wpers--overlay
-    (push (cons w wpers--overlay) wpers--shadow-overlays)))
+  (push (cons w wpers--overlay) wpers--shadow-overlays))
   
 (defun wpers--ovr-from-shadow (w)
   (let ((sh-ovr (find-if #'(lambda (x) (eq (car x) w)) wpers--shadow-overlays)))
-    (setq wpers--overlay (or (cdr sh-ovr) wpers--overlay)
-          wpers--shadow-overlays (remove sh-ovr wpers--shadow-overlays))))
+
+(message "%s" sh-ovr)
+    
+    (if sh-ovr
+        (setq wpers--overlay         (cdr sh-ovr)
+              wpers--shadow-overlays (remove sh-ovr wpers--shadow-overlays))
+        (setq wpers--overlay nil))))
 
 (defun wpers-ovr-kill-dangling ()
   (let ((wl (window-list)) dl-ovs)
     (dolist (o wpers--shadow-overlays)
-      (unless (member (overlay-get (cdr o) 'window) wl)
+      (unless (and (member (car o) wl)
+                   (member (overlay-get (cdr o) 'window) wl)
+                   (overlay-buffer (cdr o)))
         (delete-overlay (cdr o))
         (push o dl-ovs)))
     (setq wpers--shadow-overlays (remove-if #'(lambda (x) (member x dl-ovs)) wpers--shadow-overlays))))
-                                                                
-(defun wpers--adapt-ovrs ()
-  (wpers-ovr-kill-dangling)
 
+(defun wpers--adapt-ovrs ()
+;  (wpers-ovr-kill-dangling)
   (when wpers-mode
-    (let ((b (current-buffer))
-          (sw (selected-window))
+    (let ((sw (selected-window))
           (ow (and wpers--overlay (overlay-get wpers--overlay 'window))))
-      (when (and ow (not (eq sw ow)))
-        (wpers--ovr-to-shadow ow)
-        (wpers--ovr-from-shadow sw)))))
+      (cond
+        ((null wpers--overlay)
+         (wpers--ovr-from-shadow sw))
+        ((and ow (not (eq sw ow)))
+         (wpers--ovr-to-shadow ow)
+         (wpers--ovr-from-shadow sw))))))
+        
+
+         
+      ;; (when (or (and ow (not (eq sw ow)))
+      ;;           (null wpers--overlay))
+      ;;   (wpers--ovr-to-shadow ow)
+      ;;   (wpers--ovr-from-shadow sw)))))
+
+;;***********************************
 
 (defun wpers--ovr-len ()
   "Get wpers--overlay before-string property."
@@ -353,3 +371,12 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
 
 (provide 'wpers)
 ;;; wpers.el ends here
+
+                                        ;wpers--overlay
+;wpers--shadow-overlays
+
+;(remove-if-not '(lambda (x)(overlay-get x 'wpers)) (overlays-in (point-min) (point-max)))
+;(overlay-get wpers--overlay 'window)
+;(selected-window)
+;(overlay-buffer (cdar wpers--shadow-overlays))
+;(progn (remove-overlays) (setq wpers--shadow-overlays nil))
