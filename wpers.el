@@ -1,4 +1,4 @@
-;;; wpers.el --- minor mode for stopping cursor jumping in emacs
+;; wpers.el --- minor mode for stopping cursor jumping in emacs
 
 ;; Copyright (C) 2015 <wardopdem@gmail.com>
 
@@ -67,6 +67,9 @@
 (defvar-local wpers--overlay nil
   "Overlay to shift the cursor to the right.")
 
+(defvar-local wpers--shadow-overlays nil
+  "alist each element of which has the form (window . overlay)")
+
 (defgroup wpers nil
   "Persistent cursor"
   :group 'editing
@@ -133,9 +136,9 @@
   "Replacing overlay (wpers--overlay) with space chars."
   (let ((ovr-size (when (wpers--ovr-at-point-p) (wpers--ovr-len))))
     (save-excursion
-     (goto-char (overlay-start wpers--overlay))       
+     (goto-char (overlay-start wpers--overlay))
      (insert (make-string (wpers--ovr-len) ?\s)))
-    (when ovr-size (right-char ovr-size))))      
+    (when ovr-size (right-char ovr-size))))
   
 (defun wpers--ovr-kill (&optional buffer)
   "Killing of the wpers--overlay with the replacement of spacess, if necessary."
@@ -145,15 +148,33 @@
       (delete-overlay wpers--overlay)
       (setq wpers--overlay nil))))
 
-(defun wpers--clean-up-ovrs ()
-  "Destroying of overlays in the inactive buffers."
-  (mapc #'(lambda (b)
-              (when (and (local-variable-p 'wpers-mode b)
-                         (buffer-local-value 'wpers-mode b)
-                         ;(buffer-local-value 'wpers--overlay b)
-                         (not (eq b (current-buffer))))
-                (wpers--ovr-kill b)))
-        (buffer-list)))
+(defun wpers--ovr-to-shadow (w)
+  (when wpers--overlay
+    (push (cons w wpers--overlay) wpers--shadow-overlays)))
+  
+(defun wpers--ovr-from-shadow (w)
+  (let ((sh-ovr (find-if #'(lambda (x) (eq (car x) w)) wpers--shadow-overlays)))
+    (setq wpers--overlay (or (cdr sh-ovr) wpers--overlay)
+          wpers--shadow-overlays (remove sh-ovr wpers--shadow-overlays))))
+
+(defun wpers-ovr-kill-dangling ()
+  (let ((wl (window-list)) dl-ovs)
+    (dolist (o wpers--shadow-overlays)
+      (unless (member (overlay-get (cdr o) 'window) wl)
+        (delete-overlay (cdr o))
+        (push o dl-ovs)))
+    (setq wpers--shadow-overlays (remove-if #'(lambda (x) (member x dl-ovs)) wpers--shadow-overlays))))
+                                                                
+(defun wpers--adapt-ovrs ()
+  (wpers-ovr-kill-dangling)
+
+  (when wpers-mode
+    (let ((b (current-buffer))
+          (sw (selected-window))
+          (ow (and wpers--overlay (overlay-get wpers--overlay 'window))))
+      (when (and ow (not (eq sw ow)))
+        (wpers--ovr-to-shadow ow)
+        (wpers--ovr-from-shadow sw)))))
 
 (defun wpers--ovr-len ()
   "Get wpers--overlay before-string property."
@@ -161,7 +182,9 @@
 
 (defun wpers--ovr-put (len) 
   "Set wpers--overlay property before-string to (make-string LEN wpers-pspace)."
-  (overlay-put wpers--overlay 'before-string (wpers--ovr-propz-txt (wpers--ovr-str len))))
+  (if (zerop len)
+      (wpers--ovr-kill)
+      (overlay-put wpers--overlay 'before-string (wpers--ovr-propz-txt (wpers--ovr-str len)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Column managing functions
@@ -240,10 +263,10 @@
 (defun wpers--post-command ()
   "Killing wpers--overlay when it is not at the point or text happens after it."
   (when wpers--overlay
-    (overlay-put wpers--overlay 'window (selected-window))
+ ;   (overlay-put wpers--overlay 'window (selected-window))
     (when  (or (not (wpers--ovr-at-point-p))
                (wpers--ovr-txt-after-p))
-      (wpers--ovr-kill))))                      
+      (wpers--ovr-kill))))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; Custom accessors
@@ -281,10 +304,12 @@
       (progn
         (message "Wpers enabled")
         (setq wpers--overlay nil)
+        (add-hook 'buffer-list-update-hook #'wpers--adapt-ovrs)
         (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
       (progn
         (message "Wpers disabled")
         (wpers--ovr-kill)
+        (remove-hook 'buffer-list-update-hook #'wpers--adapt-ovrs)
         (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
 
 (defcustom wpers-pspace ?\s
@@ -304,13 +329,17 @@
       ((member val  '(- (4))) nil)
       (t val))))
 
-(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line) 
+(defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line)
   "Functions killing overlay"
   :group 'wpers
   :type '(repeat function))
 
 (defcustom wpers-remaps
-  '((wpers--vert-handler  next-line previous-line scroll-up-command scroll-down-command cua-scroll-down cua-scroll-up scroll-up-line scroll-down-line)
+  '((wpers--vert-handler  next-line previous-line
+                          scroll-up scroll-down
+                          scroll-up-command scroll-down-command
+                          cua-scroll-down cua-scroll-up
+                          scroll-up-line scroll-down-line)
     (wpers--left-handler  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--right-handler right-char forward-char)
     (wpers--mouse-handler mouse-set-point))
@@ -321,9 +350,6 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
                        where KEY is a string intended for `kbd' processing"
   :options '(wpers--vert-handler wpers--left-handler wpers--right-handler wpers--mouse-handler)
   :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string)))))
-
-;; Destroying ot the overlays in all inactive buffers
-(add-hook 'post-command-hook 'wpers--clean-up-ovrs)
 
 (provide 'wpers)
 ;;; wpers.el ends here
