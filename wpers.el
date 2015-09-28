@@ -78,12 +78,6 @@ each element of which has the form (window . overlay).")
   :group 'editing
   :prefix "wpers-")
 
-(defvar wpers--funs-alist nil
-  "alist of remaped functions.")
-
-(defconst wpers--mode-map (make-sparse-keymap)
-  "Wpers-mode keymap.")
-
 (defconst wreps--hooks-alist
   '((pre-command-hook  . wpers--pre-command)
     (post-command-hook . wpers--post-command))
@@ -103,6 +97,8 @@ each element of which has the form (window . overlay).")
        (or (null ch) (eq ch ?\n))))
 
 (defun wpers--hll-p (&optional w)
+  "Return t if highlighting by global-hl-line-mode/hl-line-mode 
+is active in the window W (selected window by default)"
   (let ((w (or w (selected-window))))
     (or (and (default-boundp 'global-hl-line-mode) 
              global-hl-line-mode
@@ -115,7 +111,7 @@ each element of which has the form (window . overlay).")
 ;;; Overlay managing functions
 
 (defun wpers--ovr-propz-txt (txt &optional w)
-  "Propertize TXT for overlay displaying."
+  "Propertize TXT for overlay displaying in window W (selected window by default)."
   (if (wpers--hll-p w)
       (propertize txt 'face (list :background (face-attribute 'hl-line :background nil t)))
       txt))
@@ -180,9 +176,11 @@ each element of which has the form (window . overlay).")
 ;;; Shadow overlays
 
 (defun wpers--ovr-to-shadow (w)
+  "Make overlay in the window W inactive (but visible)."
   (push (cons w wpers--overlay) wpers--shadow-overlays))
   
 (defun wpers--ovr-from-shadow (w)
+  "Restore active overlay in the window W from previously saved state."
   (let ((sh-ovr (find-if #'(lambda (x) (eq (car x) w)) wpers--shadow-overlays)))
     (if sh-ovr
         (setq wpers--overlay (cdr sh-ovr)
@@ -190,6 +188,7 @@ each element of which has the form (window . overlay).")
         (setq wpers--overlay nil))))
 
 (defun wpers--ovr-kill-dangling ()
+  "Killing of all \"dangling\" (owned by nothing) overlays"
   (let ((wl (window-list)) dl-ovs)
     (dolist (ovr wpers--shadow-overlays)
       (let* ((w (car ovr))
@@ -202,6 +201,7 @@ each element of which has the form (window . overlay).")
     (setq wpers--shadow-overlays (remove-if #'(lambda (x) (member x dl-ovs)) wpers--shadow-overlays))))
 
 (defun wpers--adapt-ovrs ()
+  "Adapt overlays for current windows/buffers disposition."
   (when wpers-mode
     (let ((sw (selected-window)))
       (if wpers--overlay
@@ -290,7 +290,6 @@ each element of which has the form (window . overlay).")
 (defun wpers--post-command ()
   "Killing wpers--overlay when it is not at the point or text happens after it."
   (when wpers--overlay
- ;   (overlay-put wpers--overlay 'window (selected-window))
     (when  (or (not (wpers--ovr-at-point-p))
                (wpers--ovr-txt-after-p))
       (wpers--ovr-kill))))
@@ -326,7 +325,6 @@ each element of which has the form (window . overlay).")
   :init-value nil
   :lighter " wpers"
   :group 'wpers
-  :keymap wpers--mode-map
   (if wpers-mode
       (progn
         (message "Wpers enabled")
@@ -374,19 +372,9 @@ each element of which has the form (window . overlay).")
   "alist which is linking general remap-functions with commands.
 Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   HANDLER          - one of wpers--remap-xxx functions, 
-  LIST-OF-COMMANDS - list of commands (like `next-line') or looks like (COMMAND KEY)
-                       where KEY is a string intended for `kbd' processing"
+  LIST-OF-COMMANDS - list of commands"
   :options '(wpers--vert-handler wpers--left-handler wpers--right-handler wpers--mouse-handler)
   :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string)))))
 
 (provide 'wpers)
 ;;; wpers.el ends here
-
-;wpers--overlay
-;wpers--shadow-overlays
-
-;(remove-if-not '(lambda (x)(overlay-get x 'wpers)) (overlays-in (point-min) (point-max)))
-;(overlay-get wpers--overlay 'window)
-;(selected-window)
-;(overlay-buffer (cdar wpers--shadow-overlays))
-;(progn (remove-overlays) (setq wpers--shadow-overlays nil))
