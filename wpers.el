@@ -64,6 +64,8 @@
 
 (defconst wpers--pspace-def ?\xB7 "Default char for overlay displaying.")
 
+(defconst wpers--ovr-txt-prop 'before-string)
+
 (defvar-local wpers--overlay nil
   "Overlay to shift the cursor to the right.")
 
@@ -156,14 +158,14 @@ each element of which has the form (window . overlay).")
 
 (defun wpers--ovr-len ()
   "Get wpers--overlay before-string property."
-   (length (overlay-get wpers--overlay 'before-string)))
+   (length (overlay-get wpers--overlay wpers--ovr-txt-prop)))
 
 (defun wpers--ovr-put (&optional len w) 
   "Set wpers--overlay property before-string to (make-string LEN wpers-pspace)."
   (let ((len (or len (wpers--ovr-len))))
     (if (zerop len)
         (wpers--ovr-kill)
-        (overlay-put wpers--overlay 'before-string (wpers--ovr-str len w)))))
+        (overlay-put wpers--overlay wpers--ovr-txt-prop (wpers--ovr-str len w)))))
 
 (defun wpers--ovr-update ()
   (dolist (w (window-list))
@@ -171,8 +173,8 @@ each element of which has the form (window . overlay).")
       (when wpers-mode
         (dolist (ovr (remove-if-not #'(lambda (x) (overlay-get x 'wpers))
                                 (overlays-in (point-min) (point-max))))
-          (overlay-put ovr 'before-string
-                       (wpers--ovr-str (length (overlay-get ovr 'before-string))
+          (overlay-put ovr wpers--ovr-txt-prop
+                       (wpers--ovr-str (length (overlay-get ovr wpers--ovr-txt-prop))
                                        (overlay-get ovr 'window))))))))
 
 ;;; Shadow overlays
