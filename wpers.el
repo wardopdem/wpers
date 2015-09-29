@@ -338,6 +338,18 @@ is active in the window W (selected window by default)"
         (remove-hook 'buffer-list-update-hook #'wpers--adapt-ovrs)
         (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
 
+
+(defun wpers-mode-maybe ()
+  "What buffer `wpers-mode' prefers."
+  (unless (or wpers-mode (minibufferp (current-buffer)))
+    (wpers-mode 1)))
+
+
+(define-global-minor-mode global-wpers-mode
+  wpers-mode wpers-mode-maybe 
+  :group 'wpers)
+
+
 (defcustom wpers-pspace ?\s
   "Pseudo-space - char for displaying in the overlay instead of real spaces"
   :type `(choice (const :tag "Standard visible" t)
