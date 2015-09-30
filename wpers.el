@@ -23,8 +23,8 @@
 ;;; Commentary:
 
 ;; This minor mode for people hating cursor's jumping.
-;; Just turn `wpers-mode` and cursor will be moving
-;; with saving his position at the line (column).
+;; Just turn `wpers-mode` or `global-wpers-mode` and cursor
+;; will be moving with saving his position at the line (column).
 
 ;;; Installation & using:
 
@@ -33,20 +33,29 @@
 ;;         (add-to-list 'load-path <path-to-wpers>)
 ;;         (require 'wpers)
 
-;; Then call command `wpers-mode` for toggle mode
+;; Then call command `wpers-mode` for toggle mode in current buffer
 
 ;;         M-x wpers-mode
+
+;; or `global-wpers-mode` for toggle mode in all buffers
+
+;;         M-x global-wpers-mode
 
 ;;; Сustomization:
 
 ;; Call command `wpers-overlay-visible` or customise `wpers-pspace`
-;; for toggle visibility of overlay.
+;; for adjusting visibility of overlay.
 
 ;; Customize `wpers-ovr-killing-funs` to define which functions
 ;; reset the vertical position of the cursor (column).
 
 ;; Set the `wpers--remaps` to define the list of functions saving
 ;; the vertical position of the cursor (column).
+
+;;; Note
+
+;; Mode is compatible with build-in line hilight `hl-line-mode`
+;; but may have visualization problems with other similar modes.
 
 ;;; Code:
 
@@ -70,8 +79,7 @@
   "Overlay to shift the cursor to the right.")
 
 (defvar-local wpers--shadow-overlays nil
-  "alist of inactive the overlays with they windows 
-each element of which has the form (window . overlay).")
+  "List of the overlays in inactive windows.")
 
 (defgroup wpers nil
   "Persistent cursor"
@@ -79,8 +87,9 @@ each element of which has the form (window . overlay).")
   :prefix "wpers-")
 
 (defconst wreps--hooks-alist
-  '((pre-command-hook  . wpers--pre-command)
-    (post-command-hook . wpers--post-command))
+  '((pre-command-hook wpers--pre-command t)
+    (post-command-hook wpers--post-command t)
+    (buffer-list-update-hook wpers--adapt-ovrs))
   "alist (hook-var . hook-function) for wpers-mode.")
 
 ;;;;;;;;;
@@ -177,28 +186,26 @@ is active in the window W (selected window by default)"
 
 (defun wpers--ovr-to-shadow (w)
   "Make overlay in the window W inactive (but visible)."
-  (push (cons w wpers--overlay) wpers--shadow-overlays))
+  (push wpers--overlay wpers--shadow-overlays))
   
 (defun wpers--ovr-from-shadow (w)
   "Restore active overlay in the window W from previously saved state."
-  (let ((sh-ovr (find-if #'(lambda (x) (eq (car x) w)) wpers--shadow-overlays)))
+  (let ((sh-ovr (find-if #'(lambda (x) (eq (overlay-get x 'window) w)) wpers--shadow-overlays)))
     (if sh-ovr
-        (setq wpers--overlay (cdr sh-ovr)
+        (setq wpers--overlay sh-ovr
               wpers--shadow-overlays (remove sh-ovr wpers--shadow-overlays))
         (setq wpers--overlay nil))))
 
 (defun wpers--ovr-kill-dangling ()
   "Killing of all \"dangling\" (owned by nothing) overlays"
-  (let ((wl (window-list)) dl-ovs)
+  (let ((wl (window-list)) new-sh-ovs)
     (dolist (ovr wpers--shadow-overlays)
-      (let* ((w (car ovr))
-             (o (cdr ovr))
-             (ob (and o (overlay-buffer o)))
-             (ow (and o (overlay-get o 'window))))
-        (unless (and w o ob ow (member w wl) (member ow wl) (buffer-local-value 'wpers-mode ob))
-          (delete-overlay o)
-          (push ovr dl-ovs))))
-    (setq wpers--shadow-overlays (remove-if #'(lambda (x) (member x dl-ovs)) wpers--shadow-overlays))))
+      (let* ((w (overlay-get ovr 'window))
+             (b (and ovr (overlay-buffer ovr))))
+        (if (not (and ovr w b (member w wl) (buffer-local-value 'wpers-mode b)))
+            (delete-overlay ovr)
+            (push ovr new-sh-ovs))))
+    (setq wpers--shadow-overlays new-sh-ovs)))
 
 (defun wpers--adapt-ovrs ()
   "Adapt overlays for current windows/buffers disposition."
@@ -325,14 +332,12 @@ is active in the window W (selected window by default)"
       (progn
         (message "Wpers enabled")
         (setq wpers--overlay nil)
-        (add-hook 'buffer-list-update-hook #'wpers--adapt-ovrs)
-        (mapc #'(lambda (x) (add-hook (car x) (cdr x) nil t)) wreps--hooks-alist))
+        (mapc #'(lambda (x) (add-hook (car x) (cadr x) nil (caddr x))) wreps--hooks-alist))
       (progn
         (message "Wpers disabled")
         (wpers--ovr-kill)
         (wpers--ovr-kill-dangling)
-        (remove-hook 'buffer-list-update-hook #'wpers--adapt-ovrs)
-        (mapc #'(lambda (x) (remove-hook (car x) (cdr x) t)) wreps--hooks-alist))))
+        (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist))))
 
 
 (defun wpers-mode-maybe ()
@@ -344,7 +349,6 @@ is active in the window W (selected window by default)"
 (define-global-minor-mode global-wpers-mode
   wpers-mode wpers-mode-maybe 
   :group 'wpers)
-
 
 (defcustom wpers-pspace ?\s
   "Pseudo-space - char for displaying in the overlay instead of real spaces"
