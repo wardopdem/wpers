@@ -311,11 +311,7 @@ is active in the window W (selected window by default)"
         (cond ((null val)  ?\s)
               ((eq val t) wpers--pspace-def)
               (t val)))
-  (mapc #'(lambda (b)
-            (with-current-buffer b
-              (when (and (local-variable-p 'wpers-mode) wpers-mode wpers--overlay)
-                (wpers--ovr-put))))
-        (buffer-list)))
+  (wpers--ovr-update))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode public interface
