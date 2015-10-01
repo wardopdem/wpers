@@ -276,9 +276,7 @@ is active in the window W (selected window by default)"
   (call-interactively command)
   (wpers--move-to-column (car (posn-col-row (cadr last-input-event)))))
 
-
 ;;; Command advices
-
 
 (defun wpers--add-advice (h fs)
   (dolist (f (if (listp fs) fs (list fs))) 
@@ -287,34 +285,15 @@ is active in the window W (selected window by default)"
       (unless (advice-function-member-p ard-fn (symbol-function f))
         (fset old-fn (symbol-function f))
         (fset ard-fn
-              `(lambda (&rest _)
-                 (condition-case err (funcall ',h ',old-fn)
-                                 (error (message (error-message-string err)) (beep)))))
-        (advice-add f :override ard-fn)))))
-
-;; (wpers--add-advice 'wpers--vert-handler
-;;                    '(next-line previous-line
-;;                      scroll-up scroll-down
-;;                      scroll-up-command scroll-down-command
-;;                      cua-scroll-down cua-scroll-up
-;;                      scroll-up-line scroll-down-line))
-;; (wpers--add-advice 'wpers--left-handler '(left-char backward-char backward-delete-char backward-delete-char-untabify))
-;; (wpers--add-advice 'wpers--right-handler '(right-char forward-char))
-;; (wpers--add-advice 'wpers--mouse-handler 'mouse-set-point)
+              `(lambda (org-fun &rest r)
+                 (if (and wpers-mode (called-interactively-p 'any))
+                     (condition-case err (funcall ',h ',old-fn)
+                       (error (message (error-message-string err)) (beep)))
+                     (apply ',old-fn r))))
+        (advice-add f :around ard-fn)))))
 
 (defun wpers--add-advices ()
   (dolist (r wpers-remaps) (wpers--add-advice (car r) (cdr r))))
-      ;; (dolist (f fs)
-      ;;   (let ((old-fn (wpers--intern "old-" f))
-      ;;         (ard-fn (wpers--intern f)))
-      ;;     (fset old-fn (symbol-function f))
-      ;;     (fset ard-fn
-      ;;           `(lambda (&rest _)
-      ;;              (condition-case err (funcall ',h ',old-fn)
-      ;;                (error (message (error-message-string err)) (beep)))))
-      ;;     (advice-add f :override ard-fn))))))
-
-;(symbol-function (wpers--intern 'next-line))
 
 (defun wpers--remove-advices ()
   (dolist (f (apply 'append (mapcar 'cdr wpers-remaps))) 
@@ -425,10 +404,10 @@ is active in the window W (selected window by default)"
 
 (defcustom wpers-remaps
   '((wpers--vert-handler  next-line previous-line
-                          scroll-up scroll-down
-                          scroll-up-command scroll-down-command
-                          cua-scroll-down cua-scroll-up
-                          scroll-up-line scroll-down-line)
+                          scroll-up scroll-down)
+                          ;; scroll-up-command scroll-down-command
+                          ;; cua-scroll-down cua-scroll-up
+                          ;; scroll-up-line scroll-down-line)
     (wpers--left-handler  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--right-handler right-char forward-char)
     (wpers--mouse-handler mouse-set-point))
