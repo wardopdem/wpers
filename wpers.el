@@ -83,7 +83,7 @@
 
 (defgroup wpers nil
   "Persistent cursor"
-  :group 'editing
+  :group 'convenience
   :prefix "wpers-")
 
 (defconst wreps--hooks-alist
@@ -97,8 +97,7 @@
 
 (defun wpers--intern (&rest xs)
   (intern (apply 'concat wpers--prefix "--" 
-                 (mapcar #'(lambda (x) (if (stringp x) x (symbol-name x))) 
-                         xs))))
+                 (mapcar #'(lambda (x) (if (stringp x) x (symbol-name x))) xs))))
 
 (defun wpers--NOP-command ()
   "NOP interactive function"
@@ -238,9 +237,11 @@ is active in the window W (selected window by default)"
 (defun wpers--move-to-column (col)
   "Same as `move-to-column' but adds overlay for correction cursor position in the line (column)."
   (move-to-column col)
-  (let* ((last-column (- (line-end-position) (line-beginning-position)))
+  (let* ((last-column (string-width (buffer-substring-no-properties (line-beginning-position) (line-end-position))))
+      ;((last-column (- (line-end-position) (line-beginning-position)))
          (spcs-needed (- col last-column)))
-    (when (plusp spcs-needed) (wpers--ovr-make spcs-needed))))
+    (when (plusp spcs-needed)
+      (wpers--ovr-make spcs-needed))))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; Command handlers
@@ -249,26 +250,35 @@ is active in the window W (selected window by default)"
   "The handler for commands that move the cursor vertically."
   (let ((old-col (wpers--current-column)))
     (call-interactively command)
-    (wpers--move-to-column old-col)))
+    (unless goal-column
+      (wpers--move-to-column old-col))))
 
 (defun wpers--left-handler (command)
   "The handler for commands that move the cursor to the left."
   (if wpers--overlay
       (if (and (wpers--ovr-at-point-p) (wpers--at-end))
-          (if (plusp (wpers--ovr-len))
-              (wpers--ovr-put (- (wpers--ovr-len) (or current-prefix-arg 1)))
-              (wpers--ovr-kill) (call-interactively command))
+          (let* ((arg (prefix-numeric-value current-prefix-arg))
+                 (ovr-len (wpers--ovr-len))
+                 (rest-len (- ovr-len arg)))
+            (if (plusp ovr-len)
+                (if (>= rest-len 0)
+                    (wpers--ovr-put rest-len)
+                    (wpers--ovr-kill)
+                    (setq current-prefix-arg (- rest-len)) 
+                    (call-interactively command))
+                (wpers--ovr-kill) (call-interactively command)))
           (wpers--ovr-kill) (call-interactively command))
       (call-interactively command)))
 
 (defun wpers--right-handler (command)
   "The handler for commands that move the cursor to the right."
   (if (wpers--at-end)
-      (if (null wpers--overlay)
-          (wpers--ovr-make 1)
-          (if (wpers--ovr-at-point-p)
-              (wpers--ovr-put (+ (wpers--ovr-len) (or current-prefix-arg 1)))
-              (wpers--ovr-kill) (wpers--ovr-make 1)))
+      (let ((arg (prefix-numeric-value current-prefix-arg)))
+        (if (null wpers--overlay)
+            (wpers--ovr-make arg)
+            (if (wpers--ovr-at-point-p)
+                (wpers--ovr-put (+ (wpers--ovr-len) arg))
+                (wpers--ovr-kill) (wpers--ovr-make arg))))
       (wpers--ovr-kill) (call-interactively command)))
 
 (defun wpers--mouse-handler (command)
@@ -425,7 +435,7 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   :options '(wpers--vert-handler wpers--left-handler wpers--right-handler wpers--mouse-handler)
   :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string)))))
 
-(defcustom wpers-adviced nil  
+(defcustom wpers-adviced nil
   "If non-nil then uses advice for providing interactive function calls."
   :type 'boolean
   :set 'wpers--set-adviced)
