@@ -49,7 +49,7 @@
 ;; Customize `wpers-ovr-killing-funs` to define which functions
 ;; reset the vertical position of the cursor (column).
 
-;; Set the `wpers--remaps` to define the list of functions saving
+;; Set the `wpers-remaps` to define the list of functions saving
 ;; the vertical position of the cursor (column).
 
 ;;; Note
@@ -68,7 +68,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode constants, variables 
 
-(defconst wpers--prefix "wpers-"
+(defconst wpers--prefix "wpers"
   "Package prefix")
 
 (defconst wpers--pspace-def ?\xB7 "Default char for overlay displaying.")
@@ -94,6 +94,11 @@
 
 ;;;;;;;;;
 ;;; Utils
+
+(defun wpers--intern (&rest xs)
+  (intern (apply 'concat wpers--prefix "--" 
+                 (mapcar #'(lambda (x) (if (stringp x) x (symbol-name x))) 
+                         xs))))
 
 (defun wpers--NOP-command ()
   "NOP interactive function"
@@ -271,6 +276,50 @@ is active in the window W (selected window by default)"
   (call-interactively command)
   (wpers--move-to-column (car (posn-col-row (cadr last-input-event)))))
 
+
+;;; Command advices
+
+
+(defun wpers--add-advice (h fs)
+  (dolist (f (if (listp fs) fs (list fs))) 
+    (let ((old-fn (wpers--intern "old-" f))
+          (ard-fn (wpers--intern f)))
+      (unless (advice-function-member-p ard-fn (symbol-function f))
+        (fset old-fn (symbol-function f))
+        (fset ard-fn
+              `(lambda (&rest _)
+                 (condition-case err (funcall ',h ',old-fn)
+                                 (error (message (error-message-string err)) (beep)))))
+        (advice-add f :override ard-fn)))))
+
+;; (wpers--add-advice 'wpers--vert-handler
+;;                    '(next-line previous-line
+;;                      scroll-up scroll-down
+;;                      scroll-up-command scroll-down-command
+;;                      cua-scroll-down cua-scroll-up
+;;                      scroll-up-line scroll-down-line))
+;; (wpers--add-advice 'wpers--left-handler '(left-char backward-char backward-delete-char backward-delete-char-untabify))
+;; (wpers--add-advice 'wpers--right-handler '(right-char forward-char))
+;; (wpers--add-advice 'wpers--mouse-handler 'mouse-set-point)
+
+(defun wpers--add-advices ()
+  (dolist (r wpers-remaps) (wpers--add-advice (car r) (cdr r))))
+      ;; (dolist (f fs)
+      ;;   (let ((old-fn (wpers--intern "old-" f))
+      ;;         (ard-fn (wpers--intern f)))
+      ;;     (fset old-fn (symbol-function f))
+      ;;     (fset ard-fn
+      ;;           `(lambda (&rest _)
+      ;;              (condition-case err (funcall ',h ',old-fn)
+      ;;                (error (message (error-message-string err)) (beep)))))
+      ;;     (advice-add f :override ard-fn))))))
+
+;(symbol-function (wpers--intern 'next-line))
+
+(defun wpers--remove-advices ()
+  (dolist (f (apply 'append (mapcar 'cdr wpers-remaps))) 
+    (advice-remove f (wpers--intern f))))
+
 ;;;;;;;;;
 ;;; Hooks
 
@@ -288,7 +337,7 @@ is active in the window W (selected window by default)"
   (if (member this-command wpers-ovr-killing-funs)
       (wpers--ovr-kill)
       (let ((type (wpers--command-handler)))
-        (when type
+        (when nil ;type
           (unless (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
             (condition-case err (funcall type this-command)
               (error (message (error-message-string err)) (beep)))
@@ -327,17 +376,19 @@ is active in the window W (selected window by default)"
   "Toggle persistent cursor mode."
   :init-value nil
   :lighter " wpers"
-  :group 'wpers
+  :group 'wper
   (if wpers-mode
       (progn
         (message "Wpers enabled")
         (setq wpers--overlay nil)
-        (mapc #'(lambda (x) (add-hook (car x) (cadr x) nil (caddr x))) wreps--hooks-alist))
+        (mapc #'(lambda (x) (add-hook (car x) (cadr x) nil (caddr x))) wreps--hooks-alist)
+        (wpers--add-advices))
       (progn
         (message "Wpers disabled")
         (wpers--ovr-kill)
         (wpers--ovr-kill-dangling)
-        (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist))))
+        (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist))
+        (wpers--remove-advices)))
 
 
 (defun wpers-mode-maybe ()
