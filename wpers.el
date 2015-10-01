@@ -256,7 +256,7 @@ is active in the window W (selected window by default)"
   (if wpers--overlay
       (if (and (wpers--ovr-at-point-p) (wpers--at-end))
           (if (plusp (wpers--ovr-len))
-              (wpers--ovr-put (1- (wpers--ovr-len)))
+              (wpers--ovr-put (- (wpers--ovr-len) (or current-prefix-arg 1)))
               (wpers--ovr-kill) (call-interactively command))
           (wpers--ovr-kill) (call-interactively command))
       (call-interactively command)))
@@ -267,7 +267,7 @@ is active in the window W (selected window by default)"
       (if (null wpers--overlay)
           (wpers--ovr-make 1)
           (if (wpers--ovr-at-point-p)
-              (wpers--ovr-put (1+ (wpers--ovr-len)))
+              (wpers--ovr-put (+ (wpers--ovr-len) (or current-prefix-arg 1)))
               (wpers--ovr-kill) (wpers--ovr-make 1)))
       (wpers--ovr-kill) (call-interactively command)))
 
@@ -313,10 +313,11 @@ is active in the window W (selected window by default)"
  - marking is active, 
  - truncate-lines is nil 
  - command in `wpers-ovr-killing-funs'."
-  (if (member this-command wpers-ovr-killing-funs)
+  (if (or (and (not wpers-adviced) (eq this-command 'execute-extended-command))
+          (member this-command wpers-ovr-killing-funs))
       (wpers--ovr-kill)
       (let ((type (wpers--command-handler)))
-        (when nil ;type
+        (when (and type (not wpers-adviced))
           (unless (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
             (condition-case err (funcall type this-command)
               (error (message (error-message-string err)) (beep)))
@@ -348,6 +349,11 @@ is active in the window W (selected window by default)"
               (t val)))
   (wpers--ovr-update))
 
+(defun wpers--set-adviced (var val)
+  "Setter for custom `wpers-adviced'"
+  (set var val)
+  (if val (wpers--add-advices) (wpers--remove-advices)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode public interface
 
@@ -361,13 +367,14 @@ is active in the window W (selected window by default)"
         (message "Wpers enabled")
         (setq wpers--overlay nil)
         (mapc #'(lambda (x) (add-hook (car x) (cadr x) nil (caddr x))) wreps--hooks-alist)
-        (wpers--add-advices))
+        (when wpers-adviced (wpers--add-advices)))
       (progn
         (message "Wpers disabled")
         (wpers--ovr-kill)
         (wpers--ovr-kill-dangling)
-        (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist))
-        (wpers--remove-advices)))
+        (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist)
+        (unless (remove-if-not #'(lambda (x) (buffer-local-value 'wpers-mode x)) (buffer-list))
+          (wpers--remove-advices)))))
 
 
 (defun wpers-mode-maybe ()
@@ -404,10 +411,10 @@ is active in the window W (selected window by default)"
 
 (defcustom wpers-remaps
   '((wpers--vert-handler  next-line previous-line
-                          scroll-up scroll-down)
-                          ;; scroll-up-command scroll-down-command
-                          ;; cua-scroll-down cua-scroll-up
-                          ;; scroll-up-line scroll-down-line)
+                          scroll-up scroll-down
+                          scroll-up-command scroll-down-command
+                          cua-scroll-down cua-scroll-up
+                          scroll-up-line scroll-down-line)
     (wpers--left-handler  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--right-handler right-char forward-char)
     (wpers--mouse-handler mouse-set-point))
@@ -417,6 +424,11 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   LIST-OF-COMMANDS - list of commands"
   :options '(wpers--vert-handler wpers--left-handler wpers--right-handler wpers--mouse-handler)
   :type '(alist :key-type symbol :value-type (repeat (choice function (list symbol string)))))
+
+(defcustom wpers-adviced nil  
+  "If non-nil then uses advice for providing interactive function calls."
+  :type 'boolean
+  :set 'wpers--set-adviced)
 
 (provide 'wpers)
 ;;; wpers.el ends here
