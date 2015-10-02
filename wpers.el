@@ -122,6 +122,13 @@ is active in the window W (selected window by default)"
              hl-line-mode 
              (or hl-line-sticky-flag (eq w (selected-window)))))))
 
+(defun wpers--group-by-kwd (xs)
+  (let (res)
+    (dolist (x xs (reverse (mapcar #'reverse res)))
+      (if (keywordp x)
+          (push (list x) res)
+          (push x (car res))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
 
@@ -240,7 +247,6 @@ is active in the window W (selected window by default)"
   "Same as `move-to-column' but adds overlay for correction cursor position in the line (column)."
   (move-to-column col)
   (let* ((last-column (string-width (buffer-substring-no-properties (line-beginning-position) (line-end-position))))
-      ;((last-column (- (line-end-position) (line-beginning-position)))
          (spcs-needed (- col last-column)))
     (when (plusp spcs-needed)
       (wpers--ovr-make spcs-needed))))
@@ -257,18 +263,14 @@ is active in the window W (selected window by default)"
     (unless goal-column
       (wpers--move-to-column old-col))))
 
-(defun wpers--hor-handler (ovr &optional cmd arg)
-  (when ovr
-    (if (listp ovr)
-        (wpers--ovr-make (car ovr))
-        (if wpers--overlay
-            (wpers--ovr-put ovr)
-            (wpers--ovr-make ovr))))
-  ;; (when (and wpers--overlay ovr) 
-  ;;   (wpers--ovr-put ovr))
-  (when cmd
-    (let  ((current-prefix-arg (or arg current-prefix-arg))) 
-      (call-interactively cmd))))
+(defun wpers--hor-worker (&rest task-stream)
+  (dolist (task (wpers--group-by-kwd task-stream))
+    (pcase (car task)
+           (:exec (let ((current-prefix-arg (if (cddr task) (caddr task) current-prefix-arg))) 
+                    (call-interactively (cadr task))))
+           (:make (wpers--ovr-make (cadr task)))
+           (:kill (wpers--ovr-kill))
+           (:put  (wpers--ovr-put (cadr task))))))
 
 (defun wpers--left-handler (&optional command)
   "The handler for commands that move the cursor to the left."
@@ -281,54 +283,36 @@ is active in the window W (selected window by default)"
                    (rest-len (- ovr-len arg)))
               (if (plusp ovr-len)
                   (if (>= rest-len 0)
-                      (wpers--hor-handler rest-len)
-                      (wpers--hor-handler 0 command (- rest-len)))
-                  (wpers--hor-handler 0 command)))
-            (wpers--hor-handler 0 command))   
-        (wpers--hor-handler nil command))))
-
-  ;; (if wpers--overlay
-  ;;     (if (and (wpers--ovr-at-point-p) (wpers--at-end))
-  ;;         (let* ((arg (prefix-numeric-value current-prefix-arg))
-  ;;                (ovr-len (wpers--ovr-len))
-  ;;                (rest-len (- ovr-len arg)))
-  ;;           (if (plusp ovr-len)
-  ;;               (if (>= rest-len 0)
-  ;;                   (wpers--ovr-put rest-len)
-  ;;                   (wpers--ovr-kill)
-  ;;                   (setq current-prefix-arg (- rest-len)) 
-  ;;                   (call-interactively command))
-  ;;               (wpers--ovr-kill) (call-interactively command)))
-  ;;         (wpers--ovr-kill) (call-interactively command))
-  ;;     (call-interactively command)))
+                      (wpers--hor-worker :put rest-len)
+                      (wpers--hor-worker :kill :exec command (- rest-len)))
+                  (wpers--hor-worker :kill :exec command)))
+            (wpers--hor-worker :kill :exec command))   
+        (wpers--hor-worker :exec command))))
 
 (defun wpers--right-handler (&optional command)
   "The handler for commands that move the cursor to the right."
   (interactive)
-  (let ((command (if (called-interactively-p 'any) wpers--command command)))
+  (let ((command (if (called-interactively-p 'any) wpers--command command))
+        (arg (prefix-numeric-value current-prefix-arg)))
     (if (wpers--at-end)
-        (let ((arg (prefix-numeric-value current-prefix-arg)))
-          (if (null wpers--overlay)
-              (wpers--hor-handler (list arg))
-              (if (wpers--ovr-at-point-p)
-                  (wpers--hor-handler (+ (wpers--ovr-len) arg))
-                  (wpers--hor-handler (list arg)))))
-        (wpers--hor-handler nil command))))
-  ;; (let ((command (if (called-interactively-p 'any) wpers--command command)))
-  ;;   (if (wpers--at-end)
-  ;;       (let ((arg (prefix-numeric-value current-prefix-arg)))
-  ;;         (if (null wpers--overlay)
-  ;;             (wpers--ovr-make arg)
-  ;;             (if (wpers--ovr-at-point-p)
-  ;;                 (wpers--ovr-put (+ (wpers--ovr-len) arg))
-  ;;                 (wpers--ovr-kill) (wpers--ovr-make arg))))
-  ;;       (wpers--ovr-kill) (call-interactively command))))
+        (if (null wpers--overlay)
+            (wpers--hor-worker :make arg)
+            (if (wpers--ovr-at-point-p)
+                (wpers--hor-worker :put (+ (wpers--ovr-len) arg))
+                (wpers--hor-worker :make arg)))
+        (let* ((to-eol-len (string-width (buffer-substring-no-properties (point) (line-end-position))))
+               (rest-len (- to-eol-len arg)))
+          (wpers--hor-worker :exec command (if (minusp rest-len) to-eol-len arg))
+          (when (minusp rest-len) (wpers--hor-worker :make (- rest-len)))))))
 
-(defun wpers--mouse-handler (command)
+(defun wpers--mouse-handler (&optional command)
   "The handler for commands that move mouse cursor."
-  (call-interactively command)
-  (wpers--move-to-column (car (posn-col-row (cadr last-input-event)))))
+  (interactive)
+  (let ((command (if (called-interactively-p 'any) wpers--command command)))
+    (call-interactively command)
+    (wpers--move-to-column (car (posn-col-row (cadr last-input-event))))))
 
+;;;;;;;;;;;;;;;;;;;
 ;;; Command advices
 
 (defun wpers--add-advice (h fs)
@@ -350,12 +334,13 @@ is active in the window W (selected window by default)"
 
 (defun wpers--remove-advices ()
   (dolist (f (apply 'append (mapcar 'cdr wpers-remaps))) 
-    (advice-remove f (wpers--intern f))))
+    (advice-remove f (wpers--intern f))
+    (fset (wpers--intern "old-" f) nil)))
 
 ;;;;;;;;;
 ;;; Hooks
 
-(defun wpers--command-handler (&optional command)
+(defun wpers--get-command-handler (&optional command)
   "Returns handler for a command or nil if handler absent"
   (let* ((command (or command this-command))
          (rmp (find-if #'(lambda (x) (member command (cdr x))) wpers-remaps)))
@@ -369,14 +354,11 @@ is active in the window W (selected window by default)"
   (if (or (and (not wpers-adviced) (eq this-command 'execute-extended-command))
           (member this-command wpers-ovr-killing-funs))
       (wpers--ovr-kill)
-      (let ((type (wpers--command-handler)))
-        (when (and type (not wpers-adviced))
-;          (setq current-prefix-arg prefix-arg prefix-arg nil) ;!!!
+      (let ((handler (wpers--get-command-handler)))
+        (when (and handler (not wpers-adviced))
           (unless (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
-            (setq wpers--command this-command  this-command type))))))
-            ;; (condition-case err (funcall type this-command)
-            ;;   (error (message (error-message-string err)) (beep)))
-            ;; (setq this-command 'wpers--NOP-command))))))
+            (setq wpers--command this-command  
+                  this-command handler))))))
 
 (defun wpers--post-command ()
   "Killing wpers--overlay when it is not at the point or text happens after it."
@@ -431,12 +413,10 @@ is active in the window W (selected window by default)"
         (unless (remove-if-not #'(lambda (x) (buffer-local-value 'wpers-mode x)) (buffer-list))
           (wpers--remove-advices)))))
 
-
 (defun wpers-mode-maybe ()
   "What buffer `wpers-mode' prefers."
   (unless (or wpers-mode (minibufferp (current-buffer)))
     (wpers-mode 1)))
-
 
 (define-global-minor-mode global-wpers-mode
   wpers-mode wpers-mode-maybe 
