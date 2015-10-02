@@ -253,6 +253,13 @@ is active in the window W (selected window by default)"
     (unless goal-column
       (wpers--move-to-column old-col))))
 
+(defun wpers--hor-handler (ovr &optional cmd arg)
+  (when (and wpers--overlay ovr) 
+    (wpers--ovr-put ovr))
+  (when cmd
+    (let  ((current-prefix-arg (or arg current-prefix-arg))) 
+      (call-interactively cmd))))
+
 (defun wpers--left-handler (command)
   "The handler for commands that move the cursor to the left."
   (if wpers--overlay
@@ -262,13 +269,26 @@ is active in the window W (selected window by default)"
                  (rest-len (- ovr-len arg)))
             (if (plusp ovr-len)
                 (if (>= rest-len 0)
-                    (wpers--ovr-put rest-len)
-                    (wpers--ovr-kill)
-                    (setq current-prefix-arg (- rest-len)) 
-                    (call-interactively command))
-                (wpers--ovr-kill) (call-interactively command)))
-          (wpers--ovr-kill) (call-interactively command))
-      (call-interactively command)))
+                    (wpers--hor-handler rest-len)
+                    (wpers--hor-handler 0 command (- rest-len)))
+                (wpers--hor-handler 0 command)))
+          (wpers--hor-handler 0 command))   
+      (wpers--hor-handler nil command)))
+
+  ;; (if wpers--overlay
+  ;;     (if (and (wpers--ovr-at-point-p) (wpers--at-end))
+  ;;         (let* ((arg (prefix-numeric-value current-prefix-arg))
+  ;;                (ovr-len (wpers--ovr-len))
+  ;;                (rest-len (- ovr-len arg)))
+  ;;           (if (plusp ovr-len)
+  ;;               (if (>= rest-len 0)
+  ;;                   (wpers--ovr-put rest-len)
+  ;;                   (wpers--ovr-kill)
+  ;;                   (setq current-prefix-arg (- rest-len)) 
+  ;;                   (call-interactively command))
+  ;;               (wpers--ovr-kill) (call-interactively command)))
+  ;;         (wpers--ovr-kill) (call-interactively command))
+  ;;     (call-interactively command)))
 
 (defun wpers--right-handler (command)
   "The handler for commands that move the cursor to the right."
@@ -328,6 +348,7 @@ is active in the window W (selected window by default)"
       (wpers--ovr-kill)
       (let ((type (wpers--command-handler)))
         (when (and type (not wpers-adviced))
+          (setq current-prefix-arg prefix-arg prefix-arg nil) ;!!!
           (unless (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
             (condition-case err (funcall type this-command)
               (error (message (error-message-string err)) (beep)))
