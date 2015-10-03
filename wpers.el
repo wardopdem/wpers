@@ -210,11 +210,11 @@ is active in the window W (selected window by default)"
 
 (defun wpers--ovr-kill-dangling ()
   "Killing of all \"dangling\" (owned by nothing) overlays"
-  (let (new-sh-ovs) ; (wl (window-list))
+  (let (new-sh-ovs)
     (dolist (ovr wpers--shadow-overlays)
       (let* ((w (overlay-get ovr 'window))
              (b (and ovr (overlay-buffer ovr))))
-        (if (not (and ovr b (buffer-local-value 'wpers-mode b))) ; w (member w wl)
+        (if (not (and b (buffer-local-value 'wpers-mode b)))
             (delete-overlay ovr)
             (push ovr new-sh-ovs))))
     (setq wpers--shadow-overlays new-sh-ovs)))
@@ -272,9 +272,9 @@ is active in the window W (selected window by default)"
                  (_     (setq cnd t))))))))
 
 (defmacro wpers--with-comnarg (&rest body)
-  "Making let-context for COMMAND and ARG.
-Bind COMMAND to wpers--command (in interactive) or variable COMMAND.
-" 
+  "Execute BODY in the context where exists binding: 
+  COMMAND = wpers--command (in interactive) or current variable COMMAND;
+  ARG = numeric value of the current prefix arg." 
   `(let ((command (if (called-interactively-p 'any) wpers--command command))
          (arg (prefix-numeric-value current-prefix-arg)))
      ,@body))
