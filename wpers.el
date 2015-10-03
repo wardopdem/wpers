@@ -254,63 +254,70 @@ is active in the window W (selected window by default)"
 ;;;;;;;;;;;;;;;;;;;;
 ;;; Command handlers
 
+(defun wpers--processor (&rest task-stream)
+  (let ((cnd t) col)
+    (dolist (task (wpers--group-by-kwd task-stream))
+      (let ((%1 (cadr task)) (%2 (caddr task)))
+        (when cnd
+          (pcase (car task)
+                 (:when (setq cnd %1))
+                 (:exec (let ((current-prefix-arg (or %2 current-prefix-arg))) 
+                          (call-interactively %1)))
+                 (:make (wpers--ovr-make %1))
+                 (:move (wpers--move-to-column %1))
+                 (:kill (wpers--ovr-kill))
+                 (:save (setq col (wpers--current-column)))
+                 (:rest (wpers--move-to-column col))
+                 (:put  (wpers--ovr-put %1))))
+        (setq cnd t)))))
+
+(defmacro wpers--with-comnarg (&rest body)
+  `(let ((command (if (called-interactively-p 'any) wpers--command command))
+         (arg (prefix-numeric-value current-prefix-arg)))
+     ,@body))
+
 (defun wpers--vert-handler (&optional command)
   "The handler for commands that move the cursor vertically."
   (interactive)
-  (let ((command (if (called-interactively-p 'any) wpers--command command))
-        (old-col (wpers--current-column)))
-    (call-interactively command)
-    (unless goal-column
-      (wpers--move-to-column old-col))))
-
-(defun wpers--hor-worker (&rest task-stream)
-  (dolist (task (wpers--group-by-kwd task-stream))
-    (pcase (car task)
-           (:exec (let ((current-prefix-arg (if (cddr task) (caddr task) current-prefix-arg))) 
-                    (call-interactively (cadr task))))
-           (:make (wpers--ovr-make (cadr task)))
-           (:kill (wpers--ovr-kill))
-           (:put  (wpers--ovr-put (cadr task))))))
+  (wpers--with-comnarg
+   (wpers--processor :save :exec command :when (not goal-column) :rest)))
 
 (defun wpers--left-handler (&optional command)
   "The handler for commands that move the cursor to the left."
   (interactive)
-  (let ((command (if (called-interactively-p 'any) wpers--command command)))
+  (wpers--with-comnarg
     (if wpers--overlay
         (if (and (wpers--ovr-at-point-p) (wpers--at-end))
-            (let* ((arg (prefix-numeric-value current-prefix-arg))
-                   (ovr-len (wpers--ovr-len))
+            (let* ((ovr-len (wpers--ovr-len))
                    (rest-len (- ovr-len arg)))
               (if (plusp ovr-len)
                   (if (>= rest-len 0)
-                      (wpers--hor-worker :put rest-len)
-                      (wpers--hor-worker :kill :exec command (- rest-len)))
-                  (wpers--hor-worker :kill :exec command)))
-            (wpers--hor-worker :kill :exec command))   
-        (wpers--hor-worker :exec command))))
+                      (wpers--processor :put rest-len)
+                      (wpers--processor :kill :exec command (- rest-len)))
+                  (wpers--processor :kill :exec command)))
+            (wpers--processor :kill :exec command))   
+        (wpers--processor :exec command))))
 
 (defun wpers--right-handler (&optional command)
   "The handler for commands that move the cursor to the right."
   (interactive)
-  (let ((command (if (called-interactively-p 'any) wpers--command command))
-        (arg (prefix-numeric-value current-prefix-arg)))
-    (if (wpers--at-end)
-        (if (null wpers--overlay)
-            (wpers--hor-worker :make arg)
-            (if (wpers--ovr-at-point-p)
-                (wpers--hor-worker :put (+ (wpers--ovr-len) arg))
-                (wpers--hor-worker :make arg)))
-        (let* ((to-eol-len (string-width (buffer-substring-no-properties (point) (line-end-position))))
-               (rest-len (- to-eol-len arg)))
-          (wpers--hor-worker :exec command (if (minusp rest-len) to-eol-len arg))
-          (when (minusp rest-len) (wpers--hor-worker :make (- rest-len)))))))
+  (wpers--with-comnarg
+   (if (wpers--at-end)
+       (if (null wpers--overlay)
+           (wpers--processor :make arg)
+           (if (wpers--ovr-at-point-p)
+               (wpers--processor :put (+ (wpers--ovr-len) arg))
+               (wpers--processor :make arg)))
+       (let* ((to-eol-len (string-width (buffer-substring-no-properties (point) (line-end-position))))
+              (rest-len (- to-eol-len arg)))
+         (wpers--processor :exec command (if (minusp rest-len) to-eol-len arg)
+                           :when (minusp rest-len) :make (- rest-len))))))
 
 (defun wpers--mouse-handler (&optional command)
   "The handler for commands that move mouse cursor."
   (interactive)
-  (let ((command (if (called-interactively-p 'any) wpers--command command)))
-    (call-interactively command)
-    (wpers--move-to-column (car (posn-col-row (cadr last-input-event))))))
+  (wpers--with-comnarg
+    (wpers--processor :exec command :move (car (posn-col-row (cadr last-input-event))))))
 
 ;;;;;;;;;;;;;;;;;;;
 ;;; Command advices
