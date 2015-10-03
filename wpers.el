@@ -268,8 +268,8 @@ is active in the window W (selected window by default)"
                  (:kill (wpers--ovr-kill))
                  (:save (setq col (wpers--current-column)))
                  (:rest (wpers--move-to-column col))
-                 (:put  (wpers--ovr-put %1))))
-        (setq cnd t)))))
+                 (:put  (wpers--ovr-put %1))
+                 (_     (setq cnd t))))))))
 
 (defmacro wpers--with-comnarg (&rest body)
   `(let ((command (if (called-interactively-p 'any) wpers--command command))
@@ -280,23 +280,24 @@ is active in the window W (selected window by default)"
   "The handler for commands that move the cursor vertically."
   (interactive)
   (wpers--with-comnarg
-   (wpers--processor :save :exec command :when (not goal-column) :rest)))
+   (if goal-column
+       (wpers--processor :exec command :move goal-column)
+       (wpers--processor :save :exec command :rest))))
 
 (defun wpers--left-handler (&optional command)
   "The handler for commands that move the cursor to the left."
   (interactive)
   (wpers--with-comnarg
-    (if wpers--overlay
-        (if (and (wpers--ovr-at-point-p) (wpers--at-end))
-            (let* ((ovr-len (wpers--ovr-len))
-                   (rest-len (- ovr-len arg)))
-              (if (plusp ovr-len)
-                  (if (>= rest-len 0)
-                      (wpers--processor :put rest-len)
-                      (wpers--processor :kill :exec command (- rest-len)))
-                  (wpers--processor :kill :exec command)))
-            (wpers--processor :kill :exec command))   
-        (wpers--processor :exec command))))
+   (catch 'done
+     (when (and wpers--overlay (wpers--ovr-at-point-p) (wpers--at-end))
+       (let* ((ovr-len (wpers--ovr-len))
+              (rest-len (- ovr-len arg)))
+         (when (plusp ovr-len)
+           (if (>= rest-len 0)
+               (wpers--processor :put rest-len)
+               (wpers--processor :kill :exec command (- rest-len)))
+           (throw 'done nil))))
+     (wpers--processor :kill :exec command))))
 
 (defun wpers--right-handler (&optional command)
   "The handler for commands that move the cursor to the right."
