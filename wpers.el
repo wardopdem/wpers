@@ -69,11 +69,11 @@
 ;;; Mode constants, variables 
 
 (defconst wpers--prefix "wpers"
-  "Package prefix")
+  "Package symbol name prefix")
 
 (defconst wpers--pspace-def ?\xB7 "Default char for overlay displaying.")
 
-(defconst wpers--ovr-txt-prop 'before-string)
+(defconst wpers--ovr-txt-prop 'before-string "Overlay property used for inserting pseudo-spaces.")
 
 (defvar-local wpers--overlay nil
   "Overlay to shift the cursor to the right.")
@@ -92,18 +92,15 @@
   '((pre-command-hook wpers--pre-command t)
     (post-command-hook wpers--post-command t)
     (buffer-list-update-hook wpers--adapt-ovrs))
-  "alist (hook-var . hook-function) for wpers-mode.")
+  "alist (hook-var . (hook-function [local])) for wpers-mode.")
 
 ;;;;;;;;;
 ;;; Utils
 
 (defun wpers--intern (&rest xs)
+  "Make symbol with name `wpers--prefix' + \"--\" + XS elements (casted to string) concatenation."
   (intern (apply 'concat wpers--prefix "--" 
                  (mapcar #'(lambda (x) (if (stringp x) x (symbol-name x))) xs))))
-
-(defun wpers--NOP-command ()
-  "NOP interactive function"
-  (interactive))
 
 (defun wpers--at-end (&optional ovr)
   "Return non-nil if end of line or buffer be found at overlay 
@@ -123,6 +120,7 @@ is active in the window W (selected window by default)"
              (or hl-line-sticky-flag (eq w (selected-window)))))))
 
 (defun wpers--group-by-kwd (xs)
+  "Groups by keywords, f.e. (:q 1 2 :w 3 :e) => ((:q 1 2) (:w 3) (:e))"
   (let (res)
     (dolist (x xs (reverse (mapcar #'reverse res)))
       (if (keywordp x)
@@ -195,6 +193,7 @@ is active in the window W (selected window by default)"
                        (wpers--ovr-str (length (overlay-get ovr wpers--ovr-txt-prop))
                                        (overlay-get ovr 'window))))))))
 
+;;;;;;;;;;;;;;;;;;;
 ;;; Shadow overlays
 
 (defun wpers--ovr-to-shadow (w)
@@ -211,11 +210,11 @@ is active in the window W (selected window by default)"
 
 (defun wpers--ovr-kill-dangling ()
   "Killing of all \"dangling\" (owned by nothing) overlays"
-  (let ((wl (window-list)) new-sh-ovs)
+  (let (new-sh-ovs) ; (wl (window-list))
     (dolist (ovr wpers--shadow-overlays)
       (let* ((w (overlay-get ovr 'window))
              (b (and ovr (overlay-buffer ovr))))
-        (if (not (and ovr w b (member w wl) (buffer-local-value 'wpers-mode b)))
+        (if (not (and ovr b (buffer-local-value 'wpers-mode b))) ; w (member w wl)
             (delete-overlay ovr)
             (push ovr new-sh-ovs))))
     (setq wpers--shadow-overlays new-sh-ovs)))
@@ -255,6 +254,7 @@ is active in the window W (selected window by default)"
 ;;; Command handlers
 
 (defun wpers--processor (&rest task-stream)
+  "Simple processor for operations with overlays and  interactive command execution."
   (let ((cnd t) col)
     (dolist (task (wpers--group-by-kwd task-stream))
       (let ((%1 (cadr task)) (%2 (caddr task)))
@@ -272,6 +272,9 @@ is active in the window W (selected window by default)"
                  (_     (setq cnd t))))))))
 
 (defmacro wpers--with-comnarg (&rest body)
+  "Making let-context for COMMAND and ARG.
+Bind COMMAND to wpers--command (in interactive) or variable COMMAND.
+" 
   `(let ((command (if (called-interactively-p 'any) wpers--command command))
          (arg (prefix-numeric-value current-prefix-arg)))
      ,@body))
