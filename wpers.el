@@ -91,7 +91,8 @@
 (defconst wreps--hooks-alist
   '((pre-command-hook wpers--pre-command t)
     (post-command-hook wpers--post-command t)
-    (buffer-list-update-hook wpers--adapt-ovrs))
+    (buffer-list-update-hook wpers--adapt-ovrs)
+    (window-configuration-change-hook wpers--adapt-ovrs))
   "alist (hook-var . (hook-function [local])) for wpers-mode.")
 
 ;;;;;;;;;
@@ -196,40 +197,81 @@ is active in the window W (selected window by default)"
 ;;;;;;;;;;;;;;;;;;;
 ;;; Shadow overlays
 
-(defun wpers--ovr-to-shadow (w)
+(defun wpers--shadow-make (o w)
+  (cons w o))
+  ;; (overlay-put o 'window w)
+  ;; o)
+
+(defun wpers--shadow-ovr (shw)
+  (cdr shw))
+  ;; shw)
+
+(defun wpers--shadow-wnd (shw)
+  (car shw))
+  ;; (overlay-get shw 'window))
+
+(defun wpers--ovr-to-shadow (w &optional ovr) 
   "Make overlay in the window W inactive (but visible)."
-  (push wpers--overlay wpers--shadow-overlays))
-  
+  (let ((ovr (or ovr wpers--overlay)))
+      (push (wpers--shadow-make ovr w) wpers--shadow-overlays)))
+
+(defun wpers--ovr-dup ()
+  (let ((o (or wpers--overlay (wpers--shadow-ovr (car wpers--shadow-overlays)))))
+    (when o (setq o (copy-overlay o)) (overlay-put o 'window w) o)))
+
+(defmacro wpers--shadow-wnd-p (&optional w)
+  (let ((w (or w 'w)))
+      `(function (lambda (x) (eq (wpers--shadow-wnd x) ,w))))) 
+
 (defun wpers--ovr-from-shadow (w)
   "Restore active overlay in the window W from previously saved state."
-  (let ((sh-ovr (find-if #'(lambda (x) (eq (overlay-get x 'window) w)) wpers--shadow-overlays)))
+  (let ((sh-ovr (find-if (wpers--shadow-wnd-p) wpers--shadow-overlays)))
     (if sh-ovr
-        (setq wpers--overlay sh-ovr
+        (setq wpers--overlay (wpers--shadow-ovr sh-ovr)
               wpers--shadow-overlays (remove sh-ovr wpers--shadow-overlays))
-        (setq wpers--overlay nil))))
+        (setq wpers--overlay (wpers--ovr-dup)))))
+;        (setq wpers--overlay nil))))
 
 (defun wpers--ovr-kill-dangling ()
   "Killing of all \"dangling\" (owned by nothing) overlays"
-  (let (new-sh-ovs)
+  (let ((wl (window-list)) new-sh-ovs)
     (dolist (ovr wpers--shadow-overlays)
-      (let* ((w (overlay-get ovr 'window))
-             (b (and ovr (overlay-buffer ovr))))
-        (if (not (and b (buffer-local-value 'wpers-mode b)))
-            (delete-overlay ovr)
+      (let* ((o (wpers--shadow-ovr ovr))
+             (w (wpers--shadow-wnd ovr))
+             (b (and o (overlay-buffer o))))
+        (if (or (null (member w wl))
+                (not (and b (buffer-local-value 'wpers-mode b))))
+            (delete-overlay o)
             (push ovr new-sh-ovs))))
     (setq wpers--shadow-overlays new-sh-ovs)))
 
 (defun wpers--adapt-ovrs ()
   "Adapt overlays for current windows/buffers disposition."
-  (when wpers-mode
-    (let ((sw (selected-window)))
-      (if wpers--overlay
-          (let ((ow (overlay-get wpers--overlay 'window)))
-            (unless (eq sw ow)
-              (wpers--ovr-to-shadow ow)
-              (wpers--ovr-from-shadow sw)))
-          (wpers--ovr-from-shadow sw))))
-  (wpers--ovr-kill-dangling)
+
+  (let ((sw (selected-window)))
+    (setq wpers--overlay
+          (find-if #'(lambda (x) (and (overlay-get x 'wpers) (eq (overlay-get x 'window) sw)))
+                   (overlays-in (point-min) (point-max)))))
+  
+
+  ;; (wpers--ovr-kill-dangling)
+  ;; (let ((sw (selected-window)))
+  ;;   (when wpers-mode
+  ;;     (if wpers--overlay
+  ;;         (let ((ow (overlay-get wpers--overlay 'window)))
+  ;;           (unless (eq sw ow)
+  ;;             (wpers--ovr-to-shadow ow)
+  ;;             (wpers--ovr-from-shadow sw)))
+  ;;         (wpers--ovr-from-shadow sw)))
+
+  ;;   (dolist (w (remove-if-not #'(lambda (w) (and (eq (window-buffer w) (current-buffer))
+  ;;                                                (buffer-local-value 'wpers-mode (window-buffer w))))
+  ;;                             (window-list)))
+  ;;     (unless (or (eq w sw) (find-if (wpers--shadow-wnd-p) wpers--shadow-overlays))
+  ;;       (let ((ovr (wpers--ovr-dup)))
+  ;;         (overlay-put ovr 'window w)
+  ;;         (wpers--ovr-to-shadow w ovr)))))
+
   (wpers--ovr-update))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -419,7 +461,7 @@ is active in the window W (selected window by default)"
       (progn
         (message "Wpers disabled")
         (wpers--ovr-kill)
-        (wpers--ovr-kill-dangling)
+;        (wpers--ovr-kill-dangling)
         (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist)
         (unless (remove-if-not #'(lambda (x) (buffer-local-value 'wpers-mode x)) (buffer-list))
           (wpers--remove-advices)))))
