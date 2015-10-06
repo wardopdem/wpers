@@ -141,13 +141,26 @@ is active in the window W (selected window by default)"
   "Make string for overlay of length LEN"
   (wpers--ovr-propz-txt (make-string len wpers-pspace) w))
 
-(defun wpers--ovr-make (&optional len &optional w)
+(defun wpers--ovr-find (w &optional b)
+  (let ((w (or w (selected-window)))
+        (b (or b (current-buffer))))
+    (with-current-buffer b
+      (find-if #'(lambda (x) (and (overlay-get x 'wpers) (eq (overlay-get x 'window) w)))
+               (overlays-in (point-min) (point-max))))))
+
+(defun wpers--ovr-make (&optional len w)
   "Creating overlay with optional setting before-string to STR."
   (wpers--ovr-kill)
-  (setq wpers--overlay (make-overlay (point) (point)))
-  (overlay-put wpers--overlay 'wpers t)
-  (overlay-put wpers--overlay 'window (selected-window))
-  (when len (wpers--ovr-put len w)))
+  (let* ((w (or w (selected-window)))
+         (ovr (wpers--ovr-find w)))
+    (if (null ovr)
+      (setq wpers--overlay (make-overlay (point) (point)))
+      (move-overlay ovr (point) (point))
+      (setq wpers--overlay ovr))
+      
+    (overlay-put wpers--overlay 'wpers t)
+    (overlay-put wpers--overlay 'window (selected-window))
+    (when len (wpers--ovr-put len w))))
 
 (defun wpers--ovr-at-point-p ()
   "Return t if wpers--overlay was placed at the point."
@@ -170,7 +183,8 @@ is active in the window W (selected window by default)"
   (with-current-buffer (or buffer (current-buffer))
     (when wpers--overlay
       (when (not (wpers--at-end t)) (wpers--ovr-to-spcs))
-      (delete-overlay wpers--overlay)
+;      (delete-overlay wpers--overlay)
+      (overlay-put wpers--overlay wpers--ovr-txt-prop nil)
       (setq wpers--overlay nil))))
 
 (defun wpers--ovr-len ()
@@ -215,10 +229,16 @@ is active in the window W (selected window by default)"
   (let ((ovr (or ovr wpers--overlay)))
       (push (wpers--shadow-make ovr w) wpers--shadow-overlays)))
 
-(defun wpers--ovr-dup ()
-  (let ((o (or wpers--overlay (wpers--shadow-ovr (car wpers--shadow-overlays)))))
-    (when o (setq o (copy-overlay o)) (overlay-put o 'window w) o)))
+;; (defun wpers--ovr-dup ()
+;;   (let ((o (or wpers--overlay (wpers--shadow-ovr (car wpers--shadow-overlays)))))
+;;     (when o (setq o (copy-overlay o)) (overlay-put o 'window w) o)))
 
+(defun wpers--ovr-dup (w)
+  (with-current-buffer (window-buffer w)
+    (when wpers--overlay
+      (let ((ovr (copy-overlay wpers--overlay)))
+        (overlay-put ovr 'window w)))))
+              
 (defmacro wpers--shadow-wnd-p (&optional w)
   (let ((w (or w 'w)))
       `(function (lambda (x) (eq (wpers--shadow-wnd x) ,w))))) 
@@ -252,7 +272,13 @@ is active in the window W (selected window by default)"
     (setq wpers--overlay
           (find-if #'(lambda (x) (and (overlay-get x 'wpers) (eq (overlay-get x 'window) sw)))
                    (overlays-in (point-min) (point-max)))))
-  
+
+  (dolist (w (remove-if-not #'(lambda (w) (buffer-local-value 'wpers-mode (window-buffer w)))
+                            (window-list)))
+    (unless (wpers--ovr-find w (window-buffer w))
+      (wpers--ovr-dup w)))
+
+  (wpers--ovr-update))
 
   ;; (wpers--ovr-kill-dangling)
   ;; (let ((sw (selected-window)))
@@ -272,7 +298,6 @@ is active in the window W (selected window by default)"
   ;;         (overlay-put ovr 'window w)
   ;;         (wpers--ovr-to-shadow w ovr)))))
 
-  (wpers--ovr-update))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Column managing functions
@@ -415,10 +440,12 @@ is active in the window W (selected window by default)"
 
 (defun wpers--post-command ()
   "Killing wpers--overlay when it is not at the point or text happens after it."
-  (when wpers--overlay
-    (when  (or (not (wpers--ovr-at-point-p))
-               (wpers--ovr-txt-after-p))
-      (wpers--ovr-kill))))
+  (when (and wpers--overlay
+             (or (not (wpers--ovr-at-point-p))
+                 (wpers--ovr-txt-after-p)))
+    (wpers--ovr-kill))
+  (unless (wpers--ovr-find (selected-window))
+    (make-overlay (point) (point))))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; Custom accessors
