@@ -78,9 +78,6 @@
 (defvar-local wpers--overlay nil
   "Overlay to shift the cursor to the right.")
 
-(defvar-local wpers--shadow-overlays nil
-  "List of the overlays in inactive windows.")
-
 (defvar wpers--command nil "Wrapped command")
 
 (defgroup wpers nil
@@ -128,6 +125,15 @@ is active in the window W (selected window by default)"
           (push (list x) res)
           (push x (car res))))))
 
+(defun wpers--buf-p (b)
+  (buffer-local-value 'wpers-mode b))
+
+(defun wpers--ovr-p (o)
+  (overlay-get o 'wpers))
+
+(defun wpers--exists-p ()
+  (find-if #'wpers--buf-p (buffer-list)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
 
@@ -145,7 +151,7 @@ is active in the window W (selected window by default)"
   (let ((w (or w (selected-window)))
         (b (or b (current-buffer))))
     (with-current-buffer b
-      (find-if #'(lambda (x) (and (overlay-get x 'wpers) (eq (overlay-get x 'window) w)))
+      (find-if #'(lambda (x) (and (wpers--ovr-p x) (eq (overlay-get x 'window) w)))
                (overlays-in (point-min) (point-max))))))
 
 (defun wpers--ovr-make (&optional len w)
@@ -157,9 +163,8 @@ is active in the window W (selected window by default)"
       (setq wpers--overlay (make-overlay (point) (point)))
       (move-overlay ovr (point) (point))
       (setq wpers--overlay ovr))
-      
     (overlay-put wpers--overlay 'wpers t)
-    (overlay-put wpers--overlay 'window (selected-window))
+    (overlay-put wpers--overlay 'window w)
     (when len (wpers--ovr-put len w))))
 
 (defun wpers--ovr-at-point-p ()
@@ -183,7 +188,6 @@ is active in the window W (selected window by default)"
   (with-current-buffer (or buffer (current-buffer))
     (when wpers--overlay
       (when (not (wpers--at-end t)) (wpers--ovr-to-spcs))
-;      (delete-overlay wpers--overlay)
       (overlay-put wpers--overlay wpers--ovr-txt-prop nil)
       (setq wpers--overlay nil))))
 
@@ -191,7 +195,7 @@ is active in the window W (selected window by default)"
   "Get wpers--overlay before-string property."
    (length (overlay-get wpers--overlay wpers--ovr-txt-prop)))
 
-(defun wpers--ovr-put (&optional len w) 
+(defun wpers--ovr-put (&optional len w)
   "Set wpers--overlay property before-string to (make-string LEN wpers-pspace)."
   (let ((len (or len (wpers--ovr-len))))
     (if (zerop len)
@@ -202,102 +206,36 @@ is active in the window W (selected window by default)"
   (dolist (w (window-list))
     (with-current-buffer (window-buffer w)
       (when wpers-mode
-        (dolist (ovr (remove-if-not #'(lambda (x) (overlay-get x 'wpers))
-                                (overlays-in (point-min) (point-max))))
+        (dolist (ovr (remove-if-not #'wpers--ovr-p (overlays-in (point-min) (point-max))))
           (overlay-put ovr wpers--ovr-txt-prop
                        (wpers--ovr-str (length (overlay-get ovr wpers--ovr-txt-prop))
                                        (overlay-get ovr 'window))))))))
-
-;;;;;;;;;;;;;;;;;;;
-;;; Shadow overlays
-
-(defun wpers--shadow-make (o w)
-  (cons w o))
-  ;; (overlay-put o 'window w)
-  ;; o)
-
-(defun wpers--shadow-ovr (shw)
-  (cdr shw))
-  ;; shw)
-
-(defun wpers--shadow-wnd (shw)
-  (car shw))
-  ;; (overlay-get shw 'window))
-
-(defun wpers--ovr-to-shadow (w &optional ovr) 
-  "Make overlay in the window W inactive (but visible)."
-  (let ((ovr (or ovr wpers--overlay)))
-      (push (wpers--shadow-make ovr w) wpers--shadow-overlays)))
-
-;; (defun wpers--ovr-dup ()
-;;   (let ((o (or wpers--overlay (wpers--shadow-ovr (car wpers--shadow-overlays)))))
-;;     (when o (setq o (copy-overlay o)) (overlay-put o 'window w) o)))
 
 (defun wpers--ovr-dup (w)
   (with-current-buffer (window-buffer w)
     (when wpers--overlay
       (let ((ovr (copy-overlay wpers--overlay)))
         (overlay-put ovr 'window w)))))
-              
-(defmacro wpers--shadow-wnd-p (&optional w)
-  (let ((w (or w 'w)))
-      `(function (lambda (x) (eq (wpers--shadow-wnd x) ,w))))) 
-
-(defun wpers--ovr-from-shadow (w)
-  "Restore active overlay in the window W from previously saved state."
-  (let ((sh-ovr (find-if (wpers--shadow-wnd-p) wpers--shadow-overlays)))
-    (if sh-ovr
-        (setq wpers--overlay (wpers--shadow-ovr sh-ovr)
-              wpers--shadow-overlays (remove sh-ovr wpers--shadow-overlays))
-        (setq wpers--overlay (wpers--ovr-dup)))))
-;        (setq wpers--overlay nil))))
 
 (defun wpers--ovr-kill-dangling ()
   "Killing of all \"dangling\" (owned by nothing) overlays"
-  (let ((wl (window-list)) new-sh-ovs)
-    (dolist (ovr wpers--shadow-overlays)
-      (let* ((o (wpers--shadow-ovr ovr))
-             (w (wpers--shadow-wnd ovr))
-             (b (and o (overlay-buffer o))))
-        (if (or (null (member w wl))
-                (not (and b (buffer-local-value 'wpers-mode b))))
-            (delete-overlay o)
-            (push ovr new-sh-ovs))))
-    (setq wpers--shadow-overlays new-sh-ovs)))
-
+  (let ((wl (window-list)))
+    (dolist (b (buffer-list));(b (remove-if-not #'wpers--buf-p (buffer-list)))
+      (with-current-buffer b
+        (dolist (ovr (remove-if-not #'wpers--ovr-p (overlays-in (point-min) (point-max))))
+          (unless (and wpers-mode (member (overlay-get ovr 'window) wl))
+            (delete-overlay ovr)))))))
+               
 (defun wpers--adapt-ovrs ()
   "Adapt overlays for current windows/buffers disposition."
-
   (let ((sw (selected-window)))
     (setq wpers--overlay
-          (find-if #'(lambda (x) (and (overlay-get x 'wpers) (eq (overlay-get x 'window) sw)))
+          (find-if #'(lambda (x) (and (wpers--ovr-p x) (eq (overlay-get x 'window) sw)))
                    (overlays-in (point-min) (point-max)))))
-
-  (dolist (w (remove-if-not #'(lambda (w) (buffer-local-value 'wpers-mode (window-buffer w)))
-                            (window-list)))
+  (dolist (w (remove-if-not #'wpers--buf-p (window-list) :key #'window-buffer))
     (unless (wpers--ovr-find w (window-buffer w))
       (wpers--ovr-dup w)))
-
   (wpers--ovr-update))
-
-  ;; (wpers--ovr-kill-dangling)
-  ;; (let ((sw (selected-window)))
-  ;;   (when wpers-mode
-  ;;     (if wpers--overlay
-  ;;         (let ((ow (overlay-get wpers--overlay 'window)))
-  ;;           (unless (eq sw ow)
-  ;;             (wpers--ovr-to-shadow ow)
-  ;;             (wpers--ovr-from-shadow sw)))
-  ;;         (wpers--ovr-from-shadow sw)))
-
-  ;;   (dolist (w (remove-if-not #'(lambda (w) (and (eq (window-buffer w) (current-buffer))
-  ;;                                                (buffer-local-value 'wpers-mode (window-buffer w))))
-  ;;                             (window-list)))
-  ;;     (unless (or (eq w sw) (find-if (wpers--shadow-wnd-p) wpers--shadow-overlays))
-  ;;       (let ((ovr (wpers--ovr-dup)))
-  ;;         (overlay-put ovr 'window w)
-  ;;         (wpers--ovr-to-shadow w ovr)))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Column managing functions
@@ -440,12 +378,12 @@ is active in the window W (selected window by default)"
 
 (defun wpers--post-command ()
   "Killing wpers--overlay when it is not at the point or text happens after it."
+  (unless (wpers--ovr-find (selected-window))
+    (wpers--ovr-make))
   (when (and wpers--overlay
              (or (not (wpers--ovr-at-point-p))
                  (wpers--ovr-txt-after-p)))
-    (wpers--ovr-kill))
-  (unless (wpers--ovr-find (selected-window))
-    (make-overlay (point) (point))))
+    (wpers--ovr-kill)))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; Custom accessors
@@ -488,9 +426,13 @@ is active in the window W (selected window by default)"
       (progn
         (message "Wpers disabled")
         (wpers--ovr-kill)
-;        (wpers--ovr-kill-dangling)
-        (mapc #'(lambda (x) (remove-hook (car x) (cadr x) (caddr x))) wreps--hooks-alist)
-        (unless (remove-if-not #'(lambda (x) (buffer-local-value 'wpers-mode x)) (buffer-list))
+        (wpers--ovr-kill-dangling)
+        (mapc #'(lambda (x)
+                  (when (or (caddr x)
+                            (not (wpers--exists-p)))
+                    (remove-hook (car x) (cadr x) (caddr x))))
+              wreps--hooks-alist)
+        (unless (wpers--exists-p)
           (wpers--remove-advices)))))
 
 (defun wpers-mode-maybe ()
