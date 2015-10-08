@@ -191,6 +191,10 @@ is active in the window W (selected window by default)"
       (overlay-put wpers--overlay wpers--ovr-txt-prop nil)
       (setq wpers--overlay nil))))
 
+(defun wpers--ovr-destroy-all (&optional buffer)
+  (with-current-buffer (or buffer (current-buffer))
+    (remove-overlays (point-min) (point-max) 'wpers t)))
+
 (defun wpers--ovr-len ()
   "Get wpers--overlay before-string property."
    (length (overlay-get wpers--overlay wpers--ovr-txt-prop)))
@@ -222,7 +226,8 @@ is active in the window W (selected window by default)"
   (let ((wl (window-list)))
     (dolist (b (buffer-list));(b (remove-if-not #'wpers--buf-p (buffer-list)))
       (with-current-buffer b
-        (dolist (ovr (remove-if-not #'wpers--ovr-p (overlays-in (point-min) (point-max))))
+        (dolist (ovr (remove-if-not #'wpers--ovr-p
+                                    (overlays-in (point-min) (point-max))))
           (unless (and wpers-mode (member (overlay-get ovr 'window) wl))
             (delete-overlay ovr)))))))
                
@@ -232,7 +237,9 @@ is active in the window W (selected window by default)"
     (setq wpers--overlay
           (find-if #'(lambda (x) (and (wpers--ovr-p x) (eq (overlay-get x 'window) sw)))
                    (overlays-in (point-min) (point-max)))))
-  (dolist (w (remove-if-not #'wpers--buf-p (window-list) :key #'window-buffer))
+  (dolist (w (remove-if-not #'wpers--buf-p
+                            (window-list)
+                            :key #'window-buffer))
     (unless (wpers--ovr-find w (window-buffer w))
       (wpers--ovr-dup w)))
   (wpers--ovr-update))
@@ -425,15 +432,15 @@ is active in the window W (selected window by default)"
         (when wpers-adviced (wpers--add-advices)))
       (progn
         (message "Wpers disabled")
-        (wpers--ovr-kill)
+;        (wpers--ovr-kill)
+        (wpers--ovr-destroy-all)
         (wpers--ovr-kill-dangling)
-        (mapc #'(lambda (x)
-                  (when (or (caddr x)
-                            (not (wpers--exists-p)))
-                    (remove-hook (car x) (cadr x) (caddr x))))
-              wreps--hooks-alist)
-        (unless (wpers--exists-p)
-          (wpers--remove-advices)))))
+        (let ((any-alive (wpers--exists-p)))
+          (mapc #'(lambda (x)
+                    (when (or (caddr x) (not any-alive))
+                      (remove-hook (car x) (cadr x) (caddr x))))
+                wreps--hooks-alist)
+          (unless any-alive (wpers--remove-advices))))))
 
 (defun wpers-mode-maybe ()
   "What buffer `wpers-mode' prefers."
