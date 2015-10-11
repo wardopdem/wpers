@@ -68,8 +68,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode constants, variables 
 
-(defconst wpers--prefix "wpers"
-  "Package symbol name prefix")
+(defconst wpers--symbol 'wpers
+  "Package signature name")
 
 (defconst wpers--pspace-def ?\xB7
   "Default char for overlay displaying.")
@@ -100,8 +100,8 @@ or 'virtual space' option at Midnight Commander (Unix))"
 ;;; Utils
 
 (defun wpers--intern (&rest xs)
-  "Make symbol with name `wpers--prefix' + \"--\" + XS elements (casted to string) concatenation."
-  (intern (apply 'concat wpers--prefix "--" 
+  "Make symbol with name `wpers--symbol' + \"--\" + XS elements (casted to string) concatenation."
+  (intern (apply 'concat (symbol-name wpers--symbol) "--" 
                  (mapcar #'(lambda (x) (if (stringp x) x (symbol-name x))) xs))))
 
 (defun wpers--at-end (&optional ovr)
@@ -135,7 +135,7 @@ is active in the window W (selected window by default)"
 
 (defun wpers--ovr-p (ovr)
   "Return non-nil when OVR has non-nil 'wpers attribute."
-  (overlay-get ovr 'wpers))
+  (overlay-get ovr wpers--symbol))
 
 (defun wpers--exists-p ()
   "Return non-nil when any buffer with active `wpers-mode' exists."
@@ -185,7 +185,7 @@ is active in the window W (selected window by default)"
       (setq wpers--overlay (make-overlay (point) (point)))
       (move-overlay ovr (point) (point))
       (setq wpers--overlay ovr))
-    (overlay-put wpers--overlay 'wpers t)
+    (overlay-put wpers--overlay wpers--symbol t)
     (overlay-put wpers--overlay 'window w)
     (when len (wpers--ovr-put len w))))
 
@@ -217,7 +217,7 @@ is active in the window W (selected window by default)"
 (defun wpers--ovr-destroy-all (&optional b)
   "Removes all overlays in thw buffer B that have non-nil attribute 'wpers"
   (with-current-buffer (or b (current-buffer))
-    (remove-overlays (point-min) (point-max) 'wpers t)))
+    (remove-overlays (point-min) (point-max) wpers--symbol t)))
 
 (defun wpers--ovr-len ()
   "Get wpers--overlay before-string property."
