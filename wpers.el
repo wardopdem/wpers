@@ -149,6 +149,13 @@ is active in the window W (selected window by default)"
                    (wpers--non-nil (intern (concat "global-" (symbol-name (car x)))))))
     ((vectorp x) (not (wpers--non-nil (elt x 0))))))
 
+(defun wpers--replace (str &rest repls)
+  (if (null repls)
+      str
+      (apply #'wpers--replace
+             (replace-regexp-in-string (car repls) (format "%s" (cadr repls)) str)
+             (cddr repls))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
 
@@ -192,17 +199,18 @@ is active in the window W (selected window by default)"
 
 (defun wpers--ovr-to-spcs ()
   "Replacing overlay (wpers--overlay) with space chars."
-  (let ((ovr-size (when (wpers--ovr-at-point-p) (wpers--ovr-len))))
-    (save-excursion
-     (goto-char (overlay-start wpers--overlay))
-     (insert (make-string (wpers--ovr-len) ?\s)))
-    (when ovr-size (right-char ovr-size))))
+  (when wpers--overlay
+    (let ((ovr-size (when (wpers--ovr-at-point-p) (wpers--ovr-len))))
+      (save-excursion
+       (goto-char (overlay-start wpers--overlay))
+       (insert (make-string (wpers--ovr-len) ?\s)))
+      (when ovr-size (right-char ovr-size)))))
   
-(defun wpers--ovr-kill (&optional buffer)
+(defun wpers--ovr-kill (&optional buffer force-legz)
   "Killing of the wpers--overlay with the replacement of spacess, if necessary."
   (with-current-buffer (or buffer (current-buffer))
     (when wpers--overlay
-      (when (not (wpers--at-end t)) (wpers--ovr-to-spcs))
+      (when (or force-legz (not (wpers--at-end t))) (wpers--ovr-to-spcs))
       (overlay-put wpers--overlay wpers--ovr-txt-prop nil)
       (setq wpers--overlay nil))))
 
@@ -286,12 +294,10 @@ is active in the window W (selected window by default)"
   (let ((cnd t) col)
     (dolist (task (wpers--group-by-kwd task-stream))
       (let ((% (car task)) (%1 (cadr task)) (%2 (caddr task)))
-        (when cnd
-          (if (eq % :when) 
-              (setq cnd %1)
-              (setq cnd t)
+        (if (eq % :when)
+            (setq cnd %1)
+            (when cnd
               (pcase %
-                     (:when (setq cnd %1))
                      (:exec (let ((current-prefix-arg (or %2 current-prefix-arg))) 
                               (call-interactively %1)))
                      (:make (wpers--ovr-make %1))
@@ -300,9 +306,9 @@ is active in the window W (selected window by default)"
                      (:save (setq col (wpers--current-column)))
                      (:rest (wpers--move-to-column col))
                      (:put  (wpers--ovr-put %1))
-                     (:legz (wpers--ovr-to-spcs)
-                            (wpers--ovr-kill))
-                     (_     (error "wpers--processor: unknown command %s" %)))))))))
+                     (:legz (wpers--ovr-kill nil t))
+                     (_     (error "wpers--processor: unknown command %s" %))))
+            (setq cnd t))))))
 
 (defmacro wpers--with-comnarg (&rest body)
   "Execute BODY in the context where exists binding: 
@@ -357,9 +363,9 @@ is active in the window W (selected window by default)"
     (wpers--processor :exec command :move (car (posn-col-row (cadr last-input-event))))))
 
 (defun wpers--with-legalize-handler (&optional command)
-  (interactive)
+  (interactive)                                              
   (wpers--with-comnarg
-   (wpers--processor :legz :exec command)))
+   (wpers--processor :when (eq arg 1) :legz :exec command)))
 
 ;;;;;;;;;;;;;;;;;;;
 ;;; Command advices
@@ -419,7 +425,7 @@ is active in the window W (selected window by default)"
     (wpers--ovr-kill)))
 
 ;;;;;;;;;;;;;;;;;;;;
-;;; Custom accessors
+;;; Custom accessors etc
 
 (defun wpers--get-pspace (sym)
   "Getter for custom `wpers-pspace'"
@@ -442,13 +448,24 @@ is active in the window W (selected window by default)"
   (set var val)
   (if val (wpers--add-advices) (wpers--remove-advices)))
 
+(defun wpers--indicator ()
+  (let* ((c (current-column))
+         (wc (wpers--current-column))
+         (d (- wc c)))
+    (wpers--replace wpers-mode-line-format
+                    "%r"  (line-number-at-pos)
+                    "%c"  c
+                    "%wc" wc
+                    "\\?\\(.*\\)%d\\(.*\\)\\?" (if (plusp d) (format "\\1%d\\2" d) "")
+                    "%d" d)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Mode public interface
 
 (define-minor-mode wpers-mode
   "Toggle persistent cursor mode."
   :init-value nil
-  :lighter (:eval (format " {%d}" (wpers--current-column)))
+  :lighter (:eval (wpers--indicator))
   :group 'wper
   (if wpers-mode
       (progn
@@ -528,6 +545,10 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   "If non-nil then uses advice for providing interactive function calls."
   :type 'boolean
   :set 'wpers--set-adviced)
+
+(defcustom wpers-mode-line-format " {%r:%c?+%d?}"
+  "Wpers-mode line format."
+  :type 'string)
 
 (provide 'wpers)
 ;;; wpers.el ends here
