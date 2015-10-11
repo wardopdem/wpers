@@ -438,7 +438,7 @@ is active in the window W (selected window by default)"
 (define-minor-mode wpers-mode
   "Toggle persistent cursor mode."
   :init-value nil
-  :lighter " wpers"
+  :lighter (:eval (format " {%d}" (wpers--current-column)))
   :group 'wper
   (if wpers-mode
       (progn
