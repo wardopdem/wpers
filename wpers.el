@@ -71,17 +71,21 @@
 (defconst wpers--prefix "wpers"
   "Package symbol name prefix")
 
-(defconst wpers--pspace-def ?\xB7 "Default char for overlay displaying.")
+(defconst wpers--pspace-def ?\xB7
+  "Default char for overlay displaying.")
 
-(defconst wpers--ovr-txt-prop 'before-string "Overlay property used for inserting pseudo-spaces.")
+(defconst wpers--ovr-txt-prop 'before-string
+  "Overlay property used for positioning cursor at the screen.")
 
 (defvar-local wpers--overlay nil
-  "Overlay to shift the cursor to the right.")
+  "Overlay used for positioning cursor at the screen in the seected window.")
 
-(defvar wpers--command nil "Wrapped command")
+(defvar wpers--command nil
+  "Stored original command for further processing in one of wpers--...-handler.")
 
 (defgroup wpers nil
-  "Persistent cursor"
+  "Persistent cursor (see 'cursor beyond end of line' option at FAR editor (Windows) 
+or 'virtual space' option at Midnight Commander (Unix))"
   :group 'convenience
   :prefix "wpers-")
 
@@ -126,13 +130,24 @@ is active in the window W (selected window by default)"
           (push x (car res))))))
 
 (defun wpers--buf-p (b)
+  "Return non-nil when `wpers-mode' is active for B."
   (buffer-local-value 'wpers-mode b))
 
-(defun wpers--ovr-p (o)
-  (overlay-get o 'wpers))
+(defun wpers--ovr-p (ovr)
+  "Return non-nil when OVR has non-nil 'wpers attribute."
+  (overlay-get ovr 'wpers))
 
 (defun wpers--exists-p ()
+  "Return non-nil when any buffer with active `wpers-mode' exists."
   (find-if #'wpers--buf-p (buffer-list)))
+
+(defun wpers--non-nil (x)
+  (cond
+    ((symbolp x) (or (and (local-variable-p x) (buffer-local-value x (current-buffer)))
+                  (and (default-boundp x) (default-value x))))
+    ((consp x) (or (wpers--non-nil (car x))
+                   (wpers--non-nil (intern (concat "global-" (symbol-name (car x)))))))
+    ((vectorp x) (not (wpers--non-nil (elt x 0))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Overlay managing functions
@@ -191,8 +206,9 @@ is active in the window W (selected window by default)"
       (overlay-put wpers--overlay wpers--ovr-txt-prop nil)
       (setq wpers--overlay nil))))
 
-(defun wpers--ovr-destroy-all (&optional buffer)
-  (with-current-buffer (or buffer (current-buffer))
+(defun wpers--ovr-destroy-all (&optional b)
+  "Removes all overlays in thw buffer B that have non-nil attribute 'wpers"
+  (with-current-buffer (or b (current-buffer))
     (remove-overlays (point-min) (point-max) 'wpers t)))
 
 (defun wpers--ovr-len ()
@@ -379,7 +395,7 @@ is active in the window W (selected window by default)"
       (wpers--ovr-kill)
       (let ((handler (wpers--get-command-handler)))
         (when (and handler (not wpers-adviced))
-          (unless (or this-command-keys-shift-translated mark-active visual-line-mode (null truncate-lines))
+          (unless (some #'wpers--non-nil wpers-ovr-killing-vars)
             (setq wpers--command this-command  
                   this-command handler))))))
 
@@ -432,7 +448,6 @@ is active in the window W (selected window by default)"
         (when wpers-adviced (wpers--add-advices)))
       (progn
         (message "Wpers disabled")
-;        (wpers--ovr-kill)
         (wpers--ovr-destroy-all)
         (wpers--ovr-kill-dangling)
         (let ((any-alive (wpers--exists-p)))
@@ -460,18 +475,27 @@ is active in the window W (selected window by default)"
   :set 'wpers--set-pspace
   :set-after '(wpers--pspace-def))
 
-(defun wpers-overlay-visible (val) "Toggle overlay visibility if VAL is nil, swtich on if t else set to VAL"
+(defun wpers-overlay-visible (val) "Switch on overlay visibility if VAL is nil, 
+swtich off if - or (4) else set to VAL."
   (interactive "P")
   (wpers--set-pspace nil
     (cond
       ((null val) t)
       ((member val  '(- (4))) nil)
+      ((eq val :toggle) (when (eq wpers-pspace ?\s) t))
       (t val))))
+
+(defun wpers-toggle-overlay-visibility () "Toggle overlay visibility."
+  (interactive)
+  (wpers-overlay-visible :toggle))
 
 (defcustom wpers-ovr-killing-funs '(undo move-end-of-line move-beginning-of-line)
   "Functions killing overlay"
-  :group 'wpers
   :type '(repeat function))
+
+(defcustom wpers-ovr-killing-vars '(this-command-keys-shift-translated mark-active (visual-line-mode) (whitespace-mode) [truncate-lines])
+  "Variables killing overlay"
+  :type '(repeat (choice symbol (list symbol) (vector symbol))))
 
 (defcustom wpers-remaps
   '((wpers--vert-handler  next-line previous-line
