@@ -285,19 +285,24 @@ is active in the window W (selected window by default)"
   "Simple processor for operations with overlays and  interactive command execution."
   (let ((cnd t) col)
     (dolist (task (wpers--group-by-kwd task-stream))
-      (let ((%1 (cadr task)) (%2 (caddr task)))
+      (let ((% (car task)) (%1 (cadr task)) (%2 (caddr task)))
         (when cnd
-          (pcase (car task)
-                 (:when (setq cnd %1))
-                 (:exec (let ((current-prefix-arg (or %2 current-prefix-arg))) 
-                          (call-interactively %1)))
-                 (:make (wpers--ovr-make %1))
-                 (:move (wpers--move-to-column %1))
-                 (:kill (wpers--ovr-kill))
-                 (:save (setq col (wpers--current-column)))
-                 (:rest (wpers--move-to-column col))
-                 (:put  (wpers--ovr-put %1))
-                 (_     (setq cnd t))))))))
+          (if (eq % :when) 
+              (setq cnd %1)
+              (setq cnd t)
+              (pcase %
+                     (:when (setq cnd %1))
+                     (:exec (let ((current-prefix-arg (or %2 current-prefix-arg))) 
+                              (call-interactively %1)))
+                     (:make (wpers--ovr-make %1))
+                     (:move (wpers--move-to-column %1))
+                     (:kill (wpers--ovr-kill))
+                     (:save (setq col (wpers--current-column)))
+                     (:rest (wpers--move-to-column col))
+                     (:put  (wpers--ovr-put %1))
+                     (:legz (wpers--ovr-to-spcs)
+                            (wpers--ovr-kill))
+                     (_     (error "wpers--processor: unknown command %s" %)))))))))
 
 (defmacro wpers--with-comnarg (&rest body)
   "Execute BODY in the context where exists binding: 
@@ -350,6 +355,11 @@ is active in the window W (selected window by default)"
   (interactive)
   (wpers--with-comnarg
     (wpers--processor :exec command :move (car (posn-col-row (cadr last-input-event))))))
+
+(defun wpers--with-legalize-handler (&optional command)
+  (interactive)
+  (wpers--with-comnarg
+   (wpers--processor :legz :exec command)))
 
 ;;;;;;;;;;;;;;;;;;;
 ;;; Command advices
@@ -500,12 +510,13 @@ swtich off if - or (4) else set to VAL."
 (defcustom wpers-remaps
   '((wpers--vert-handler  next-line previous-line
                           scroll-up scroll-down
-                          scroll-up-command scroll-down-command
+                          scroll-up-command scroll-down-command                      
                           cua-scroll-down cua-scroll-up
                           scroll-up-line scroll-down-line)
     (wpers--left-handler  left-char backward-char backward-delete-char backward-delete-char-untabify)
     (wpers--right-handler right-char forward-char)
-    (wpers--mouse-handler mouse-set-point))
+    (wpers--mouse-handler mouse-set-point)
+    (wpers--with-legalize-handler set-goal-column))
   "alist which is linking general remap-functions with commands.
 Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   HANDLER          - one of wpers--remap-xxx functions, 
