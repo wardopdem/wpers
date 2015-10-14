@@ -72,7 +72,7 @@
   "Package signature name")
 
 (defconst wpers--pspace-def ?\xB7
-  "Default char for overlay displaying.")
+  "Default char for overlay displaying (if it is visible).")
 
 (defconst wpers--ovr-txt-prop 'before-string
   "Overlay property used for positioning cursor at the screen.")
@@ -81,7 +81,7 @@
   "Overlay used for positioning cursor at the screen in the seected window.")
 
 (defvar wpers--command nil
-  "Stored original command for further processing in one of wpers--...-handler.")
+  "Stored original command for further processing in one of wpers--xxx-handler.")
 
 (defgroup wpers nil
   "Persistent cursor (see 'cursor beyond end of line' option at FAR editor (Windows) 
@@ -94,7 +94,7 @@ or 'virtual space' option at Midnight Commander (Unix))"
     (post-command-hook wpers--post-command t)
     (buffer-list-update-hook wpers--adapt-ovrs)
     (window-configuration-change-hook wpers--adapt-ovrs))
-  "alist (hook-var . (hook-function [local])) for wpers-mode.")
+  "alist (hook-var hook-function [local]) for wpers-mode.")
 
 ;;;;;;;;;
 ;;; Utils
