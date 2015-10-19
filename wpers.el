@@ -546,7 +546,7 @@ Each element looks like (HANDLER . LIST-OF-COMMANDS) where
   :type 'boolean
   :set 'wpers--set-adviced)
 
-(defcustom wpers-mode-line-format " {%r:%c?+%d?}"
+(defcustom wpers-mode-line-format " ?[%wc=%c+%d]?" ; " {%r:%c?+%d?}"
   "Wpers-mode line format."
   :type 'string)
 
